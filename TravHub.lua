@@ -396,7 +396,7 @@ do
         end)
     end
 
-    -- Keyboard input connection (proc=true blocks Ctrl+V so we split into two connections)
+    -- Keyboard input connection
     local _inConn = UserInputService.InputBegan:Connect(function(inp, proc)
         if proc or _busy or not _inputReady then return end
         local kc = inp.KeyCode
@@ -411,26 +411,25 @@ do
         end
     end)
 
-    -- Separate connection for Ctrl+V — intentionally ignores proc so paste
-    -- always fires even when the game tries to consume the input
-    local _pasteConn = UserInputService.InputBegan:Connect(function(inp, _proc)
-        if _busy or not _inputReady then return end
-        if inp.KeyCode ~= Enum.KeyCode.V then return end
-        if not _isCtrl() then return end
-        local pasted = _getClipboard()
-        pasted = pasted:gsub("[%s\n\r]", ""):sub(1, 100)
-        if #pasted > 0 then
-            _buf = pasted
-            _refreshDisplay()
-            _hint.Text  = "✦  Key pasted — press ENTER to confirm"
-            _hint.Color = AME.light
-        end
-    end)
-
-    -- Blinking cursor
+    -- Ctrl+V paste via Heartbeat polling — bypasses proc entirely
+    local _lastPaste = 0
     local _blinkConn = RunService.Heartbeat:Connect(function()
         if _inputReady and not _busy then
             _cur.Visible = (tick() % 1 < 0.55)
+            -- Poll for Ctrl+V (0.3s debounce so it doesn't fire repeatedly)
+            if _isCtrl() and UserInputService:IsKeyDown(Enum.KeyCode.V) then
+                if tick() - _lastPaste > 0.3 then
+                    _lastPaste = tick()
+                    local pasted = _getClipboard()
+                    pasted = pasted:gsub("[%s\n\r]", ""):sub(1, 100)
+                    if #pasted > 0 then
+                        _buf = pasted
+                        _refreshDisplay()
+                        _hint.Text  = "✦  Key pasted — press ENTER to confirm"
+                        _hint.Color = AME.light
+                    end
+                end
+            end
         end
     end)
 
@@ -472,9 +471,8 @@ do
     -- Block main thread until validated
     while not _keyPassed do task.wait(0.05) end
 
-    pcall(function() _inConn:Disconnect()     end)
-    pcall(function() _pasteConn:Disconnect()  end)
-    pcall(function() _blinkConn:Disconnect()  end)
+    pcall(function() _inConn:Disconnect()    end)
+    pcall(function() _blinkConn:Disconnect() end)
 end  -- end key gate scope
 
 -- ══════════════════════════════════════════
