@@ -300,7 +300,7 @@ do
     end
 
     -- ── KeyCode → char map ──────────────────────────────────────────────────────
-    local _KMAP = {
+    local _KMAP_UP = {
         [Enum.KeyCode.A]="A",[Enum.KeyCode.B]="B",[Enum.KeyCode.C]="C",[Enum.KeyCode.D]="D",
         [Enum.KeyCode.E]="E",[Enum.KeyCode.F]="F",[Enum.KeyCode.G]="G",[Enum.KeyCode.H]="H",
         [Enum.KeyCode.I]="I",[Enum.KeyCode.J]="J",[Enum.KeyCode.K]="K",[Enum.KeyCode.L]="L",
@@ -314,11 +314,43 @@ do
         [Enum.KeyCode.Nine]="9",
         [Enum.KeyCode.Minus]="-",[Enum.KeyCode.Period]=".",[Enum.KeyCode.Slash]="/",
     }
+    local _KMAP_LO = {
+        [Enum.KeyCode.A]="a",[Enum.KeyCode.B]="b",[Enum.KeyCode.C]="c",[Enum.KeyCode.D]="d",
+        [Enum.KeyCode.E]="e",[Enum.KeyCode.F]="f",[Enum.KeyCode.G]="g",[Enum.KeyCode.H]="h",
+        [Enum.KeyCode.I]="i",[Enum.KeyCode.J]="j",[Enum.KeyCode.K]="k",[Enum.KeyCode.L]="l",
+        [Enum.KeyCode.M]="m",[Enum.KeyCode.N]="n",[Enum.KeyCode.O]="o",[Enum.KeyCode.P]="p",
+        [Enum.KeyCode.Q]="q",[Enum.KeyCode.R]="r",[Enum.KeyCode.S]="s",[Enum.KeyCode.T]="t",
+        [Enum.KeyCode.U]="u",[Enum.KeyCode.V]="v",[Enum.KeyCode.W]="w",[Enum.KeyCode.X]="x",
+        [Enum.KeyCode.Y]="y",[Enum.KeyCode.Z]="z",
+        [Enum.KeyCode.Zero]="0",[Enum.KeyCode.One]="1",[Enum.KeyCode.Two]="2",
+        [Enum.KeyCode.Three]="3",[Enum.KeyCode.Four]="4",[Enum.KeyCode.Five]="5",
+        [Enum.KeyCode.Six]="6",[Enum.KeyCode.Seven]="7",[Enum.KeyCode.Eight]="8",
+        [Enum.KeyCode.Nine]="9",
+        [Enum.KeyCode.Minus]="-",[Enum.KeyCode.Period]=".",[Enum.KeyCode.Slash]="/",
+    }
 
-    local _buf      = _savedKey
-    local _busy     = false
-    local _attempts = 0
-    local _inputReady = false  -- set to true after init completes
+    local _buf        = _savedKey
+    local _busy       = false
+    local _attempts   = 0
+    local _inputReady = false
+
+    local function _isShift()
+        return UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
+            or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
+    end
+    local function _isCtrl()
+        return UserInputService:IsKeyDown(Enum.KeyCode.LeftControl)
+            or UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
+    end
+    local function _getClipboard()
+        local t = ""
+        pcall(function() t = getclipboard() or "" end)
+        if t ~= "" then return t end
+        pcall(function() t = Clipboard.get() or "" end)
+        if t ~= "" then return t end
+        pcall(function() t = syn.get_clipboard() or "" end)
+        return t
+    end
 
     local function _refreshDisplay()
         local show = #_buf <= 4
@@ -372,15 +404,17 @@ do
             _validate()
         elseif kc == Enum.KeyCode.Backspace then
             if #_buf > 0 then _buf = _buf:sub(1,-2); _refreshDisplay() end
-        elseif kc == Enum.KeyCode.V and UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
-            -- Ctrl+V paste from clipboard
-            local pasted = ""
-            pcall(function() pasted = getclipboard() or "" end)
-            pcall(function() if pasted == "" then pasted = Clipboard and Clipboard.get() or "" end end)
-            pasted = pasted:gsub("%s+",""):upper():sub(1,64)
-            if #pasted > 0 then _buf = pasted; _refreshDisplay() end
+        elseif kc == Enum.KeyCode.V and _isCtrl() then
+            local pasted = _getClipboard()
+            pasted = pasted:gsub("[%s\n\r]",""):sub(1,64)
+            if #pasted > 0 then
+                _buf = pasted; _refreshDisplay()
+                _hint.Text = "✦  Key pasted — press ENTER to confirm"
+                _hint.Color = AME.light
+            end
         else
-            local ch = _KMAP[kc]
+            local map = _isShift() and _KMAP_UP or _KMAP_LO
+            local ch = map[kc]
             if ch and #_buf < 64 then _buf = _buf..ch; _refreshDisplay() end
         end
     end)
