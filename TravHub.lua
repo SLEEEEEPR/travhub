@@ -1212,7 +1212,24 @@ local LOOT_BLACKLIST={
     LeftLowerLeg=true,RightLowerLeg=true,LeftFoot=true,RightFoot=true,
     Baseplate=true,Terrain=true,SpawnLocation=true,Sky=true,Sun=true,
     Part=true,UnionOperation=true,Decal=true,Texture=true,SpecialMesh=true,
+    -- Project Delta hitbox parts
+    HeadTopHitBox=true,FaceHitBox=true,HeadHitBox=true,
+    BodyHitBox=true,TorsoHitBox=true,ChestHitBox=true,
+    ArmHitBox=true,LegHitBox=true,HandHitBox=true,FootHitBox=true,
+    UpperTorsoHitBox=true,LowerTorsoHitBox=true,
+    LeftArmHitBox=true,RightArmHitBox=true,
+    LeftLegHitBox=true,RightLegHitBox=true,
+    NeckHitBox=true,BackHitBox=true,SpineHitBox=true,
 }
+-- Keyword blacklist: any part name containing these strings is always skipped
+local LOOT_NAME_BLACKLIST_KWS={"hitbox","hit_box","hitzone","hit_zone","damagebox","damage_box","hurtbox","hurt_box","collision","ragdoll","nametag","billboard","highlight","selection","attachment"}
+local function _IsBlacklistedName(n)
+    local l=n:lower()
+    for _,kw in ipairs(LOOT_NAME_BLACKLIST_KWS) do
+        if l:find(kw,1,true) then return true end
+    end
+    return false
+end
 local LOOT_CATS={
     Keys={"keycard","key card","access card","id card","passcard","badge","fob","room key","master key","storage key","cabinet key","cell key","red keycard","blue keycard","green keycard","yellow keycard","black keycard","vip key"},
     Bodies={"body","corpse","dead","ragdoll","remains","victim","fallen","skeleton","bones","player body","dead body","loot body"},
@@ -1245,10 +1262,17 @@ local function _LootCheck(inst)
     if IsPlayerChar(inst) then return end
     local n=inst.Name
     if n=="" or LOOT_BLACKLIST[n] then return end
+    -- Block any part whose name contains hitbox/collision/etc keywords
+    if _IsBlacklistedName(n) then return end
+    -- Walk ancestors: skip anything inside any player's character
     local anc=inst.Parent
     while anc and anc~=Workspace do
         if IsPlayerChar(anc) then return end
         if anc==LocalPlayer.Character then return end
+        -- Also check every player character explicitly
+        for _,p in ipairs(Players:GetPlayers()) do
+            if anc==p.Character then return end
+        end
         anc=anc.Parent
     end
     local pos
