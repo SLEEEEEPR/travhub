@@ -217,10 +217,6 @@ end
 local _keyPassed = false
 
 do
-    local _vp  = Camera.ViewportSize
-    local _scx = _vp.X * 0.5
-    local _scy = _vp.Y * 0.5
-
     -- Try to load saved key from disk
     local _savedKey = ""
     pcall(function()
@@ -229,114 +225,124 @@ do
         end
     end)
 
-    -- ── Panel geometry ─────────────────────────────────────────────────────────
-    local _pW, _pH = 490, 250
-    local _pX, _pY = _scx - _pW*0.5, _scy - _pH*0.5
-
-    -- ── Drawing decorations (background, borders, title) ──────────────────────
-    local _bg    = NewDraw("Square",{Visible=true,Filled=true, Color=Color3.new(0,0,0),Transparency=0.30,Position=Vector2.new(0,0),        Size=Vector2.new(_vp.X,_vp.Y)})
-    local _panel = NewDraw("Square",{Visible=true,Filled=true, Color=AME.deep,         Transparency=0.06,Position=Vector2.new(_pX,_pY),    Size=Vector2.new(_pW,_pH)})
-    local _bord  = NewDraw("Square",{Visible=true,Filled=false,Color=AME.mid,          Thickness=2,     Position=Vector2.new(_pX,_pY),    Size=Vector2.new(_pW,_pH)})
-    local _ibord = NewDraw("Square",{Visible=true,Filled=false,Color=AME.dark,         Thickness=1,     Position=Vector2.new(_pX+4,_pY+4),Size=Vector2.new(_pW-8,_pH-8)})
-    local _crys = {
-        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX,     _pY),     To=Vector2.new(_pX+22,    _pY)}),
-        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX,     _pY),     To=Vector2.new(_pX,       _pY+22)}),
-        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX+_pW, _pY),     To=Vector2.new(_pX+_pW-22,_pY)}),
-        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX+_pW, _pY),     To=Vector2.new(_pX+_pW,   _pY+22)}),
-        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX,     _pY+_pH), To=Vector2.new(_pX+22,    _pY+_pH)}),
-        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX,     _pY+_pH), To=Vector2.new(_pX,       _pY+_pH-22)}),
-        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX+_pW, _pY+_pH), To=Vector2.new(_pX+_pW-22,_pY+_pH)}),
-        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX+_pW, _pY+_pH), To=Vector2.new(_pX+_pW,   _pY+_pH-22)}),
-    }
-    local _ttl  = NewDraw("Text",{Visible=true,Text="TRAV HUB",Size=40,Center=true,Outline=true,OutlineColor=AME.dark,Color=AME.bright,Position=Vector2.new(_scx,_pY+12),Font=Drawing.Fonts.GothamBold})
-    local _sub  = NewDraw("Text",{Visible=true,Text="Project Delta  ·  Crystal Edition  ·  v3.8",Size=12,Center=true,Outline=true,OutlineColor=Color3.new(0,0,0),Color=AME.light,Position=Vector2.new(_scx,_pY+56),Font=Drawing.Fonts.Gotham})
-    local _sep  = NewDraw("Line",{Visible=true,Color=AME.mid,Thickness=1,Transparency=0.45,From=Vector2.new(_pX+24,_pY+74),To=Vector2.new(_pX+_pW-24,_pY+74)})
-    local _step = NewDraw("Text",{Visible=true,Text="⟳  Connecting to KeyAuth...",Size=12,Center=true,Outline=true,OutlineColor=Color3.new(0,0,0),Color=AME.light,Position=Vector2.new(_scx,_pY+82),Font=Drawing.Fonts.Gotham})
-    local _prmpt= NewDraw("Text",{Visible=false,Text="Enter your license key:",Size=12,Center=true,Outline=true,OutlineColor=Color3.new(0,0,0),Color=AME.white,Position=Vector2.new(_scx,_pY+100),Font=Drawing.Fonts.Gotham})
-    local _hint = NewDraw("Text",{Visible=true,Text="Please wait...",Size=11,Center=true,Outline=true,OutlineColor=Color3.new(0,0,0),Color=Color3.fromRGB(120,110,155),Position=Vector2.new(_scx,_pY+_pH-22),Font=Drawing.Fonts.Gotham})
-
-    local _allDrawings = {_bg,_panel,_bord,_ibord,_ttl,_sub,_sep,_step,_prmpt,_hint}
-    for _,c in ipairs(_crys) do tinsert(_allDrawings,c) end
-
-    -- ── Real ScreenGui TextBox for input (native paste/typing support) ─────────
+    -- ── Pure ScreenGui key gate — no Drawing API ───────────────────────────────
     local _gui = Instance.new("ScreenGui")
     _gui.Name = "TravHubKeyGate"
     _gui.ResetOnSpawn = false
-    _gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    _gui.DisplayOrder = 9999
+    _gui.ZIndexBehavior = Enum.ZIndexBehavior.Global
     pcall(function() _gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end)
 
-    -- Invisible frame sized to panel
-    local _frame = Instance.new("Frame")
-    _frame.Size = UDim2.new(0, _pW, 0, _pH)
-    _frame.Position = UDim2.new(0, _pX, 0, _pY)
-    _frame.BackgroundTransparency = 1
-    _frame.BorderSizePixel = 0
-    _frame.Parent = _gui
+    -- Fullscreen dark overlay
+    local _overlay = Instance.new("Frame")
+    _overlay.Size = UDim2.new(1, 0, 1, 0)
+    _overlay.Position = UDim2.new(0, 0, 0, 0)
+    _overlay.BackgroundColor3 = Color3.new(0, 0, 0)
+    _overlay.BackgroundTransparency = 0.45
+    _overlay.BorderSizePixel = 0
+    _overlay.ZIndex = 1
+    _overlay.Parent = _gui
 
-    -- Drag handle covers ONLY the top title area so the textbox stays clickable
-    local _drag = Instance.new("Frame")
-    _drag.Size = UDim2.new(1, 0, 0, 115)  -- covers title + subtitle, stops above textbox
-    _drag.Position = UDim2.new(0, 0, 0, 0)
-    _drag.BackgroundTransparency = 1
-    _drag.BorderSizePixel = 0
-    _drag.ZIndex = 2
-    _drag.Parent = _frame
+    -- Main panel
+    local _panel = Instance.new("Frame")
+    _panel.Size = UDim2.new(0, 490, 0, 240)
+    _panel.Position = UDim2.new(0.5, -245, 0.5, -120)
+    _panel.BackgroundColor3 = Color3.fromRGB(12, 4, 28)
+    _panel.BackgroundTransparency = 0.05
+    _panel.BorderSizePixel = 0
+    _panel.ZIndex = 2
+    _panel.Active = true
+    _panel.Parent = _gui
 
-    -- Drag logic
-    local _dragging, _dragStart, _startPos = false, nil, nil
-    _drag.InputBegan:Connect(function(inp)
-        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
-            _dragging = true
-            _dragStart = inp.Position
-            _startPos  = _frame.Position
-        end
-    end)
-    _drag.InputEnded:Connect(function(inp)
-        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
-            _dragging = false
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(inp)
-        if _dragging and inp.UserInputType == Enum.UserInputType.MouseMovement then
-            local delta = inp.Position - _dragStart
-            local newX = _startPos.X.Offset + delta.X
-            local newY = _startPos.Y.Offset + delta.Y
-            _frame.Position = UDim2.new(0, newX, 0, newY)
-            local dx = newX - _pX
-            local dy = newY - _pY
-            _panel.Position = Vector2.new(_pX+dx,    _pY+dy)
-            _bord.Position  = Vector2.new(_pX+dx,    _pY+dy)
-            _ibord.Position = Vector2.new(_pX+4+dx,  _pY+4+dy)
-            _ttl.Position   = Vector2.new(_scx+dx,   _pY+12+dy)
-            _sub.Position   = Vector2.new(_scx+dx,   _pY+56+dy)
-            _sep.From       = Vector2.new(_pX+24+dx, _pY+74+dy)
-            _sep.To         = Vector2.new(_pX+_pW-24+dx, _pY+74+dy)
-            _step.Position  = Vector2.new(_scx+dx,   _pY+82+dy)
-            _prmpt.Position = Vector2.new(_scx+dx,   _pY+100+dy)
-            _hint.Position  = Vector2.new(_scx+dx,   _pY+_pH-22+dy)
-            local crysBase = {
-                {Vector2.new(_pX,_pY),         Vector2.new(_pX+22,_pY)},
-                {Vector2.new(_pX,_pY),         Vector2.new(_pX,_pY+22)},
-                {Vector2.new(_pX+_pW,_pY),     Vector2.new(_pX+_pW-22,_pY)},
-                {Vector2.new(_pX+_pW,_pY),     Vector2.new(_pX+_pW,_pY+22)},
-                {Vector2.new(_pX,_pY+_pH),     Vector2.new(_pX+22,_pY+_pH)},
-                {Vector2.new(_pX,_pY+_pH),     Vector2.new(_pX,_pY+_pH-22)},
-                {Vector2.new(_pX+_pW,_pY+_pH), Vector2.new(_pX+_pW-22,_pY+_pH)},
-                {Vector2.new(_pX+_pW,_pY+_pH), Vector2.new(_pX+_pW,_pY+_pH-22)},
-            }
-            for i,c in ipairs(_crys) do
-                c.From = crysBase[i][1] + Vector2.new(dx,dy)
-                c.To   = crysBase[i][2] + Vector2.new(dx,dy)
-            end
-        end
-    end)
+    -- Purple border via UIStroke
+    local _stroke = Instance.new("UIStroke")
+    _stroke.Color = Color3.fromRGB(160, 80, 255)
+    _stroke.Thickness = 2
+    _stroke.Parent = _panel
 
-    -- TextBox — ZIndex 3 so it's always above the drag frame and always clickable
+    -- Corner accents (4 corners using Frames)
+    local function _makeCorner(xA, yA, w, h)
+        local f = Instance.new("Frame")
+        f.Size = UDim2.new(0, w, 0, h)
+        f.Position = UDim2.new(xA, 0, yA, 0)
+        f.BackgroundColor3 = Color3.fromRGB(200, 130, 255)
+        f.BorderSizePixel = 0
+        f.ZIndex = 3
+        f.Parent = _panel
+    end
+    -- Top-left
+    _makeCorner(0, 0, 22, 2); _makeCorner(0, 0, 2, 22)
+    -- Top-right
+    _makeCorner(1, 0, -22, 2); _makeCorner(1, 0, -2, 22)
+    -- Bottom-left
+    _makeCorner(0, 1, 22, -2); _makeCorner(0, 1, 2, -22)
+    -- Bottom-right
+    _makeCorner(1, 1, -22, -2); _makeCorner(1, 1, -2, -22)
+
+    -- Title
+    local _ttl = Instance.new("TextLabel")
+    _ttl.Size = UDim2.new(1, 0, 0, 48)
+    _ttl.Position = UDim2.new(0, 0, 0, 8)
+    _ttl.BackgroundTransparency = 1
+    _ttl.Text = "TRAV HUB"
+    _ttl.TextColor3 = Color3.fromRGB(200, 130, 255)
+    _ttl.Font = Enum.Font.GothamBold
+    _ttl.TextSize = 36
+    _ttl.ZIndex = 3
+    _ttl.Parent = _panel
+
+    -- Subtitle
+    local _sub = Instance.new("TextLabel")
+    _sub.Size = UDim2.new(1, 0, 0, 20)
+    _sub.Position = UDim2.new(0, 0, 0, 54)
+    _sub.BackgroundTransparency = 1
+    _sub.Text = "Project Delta  ·  Crystal Edition  ·  v3.8"
+    _sub.TextColor3 = Color3.fromRGB(160, 130, 200)
+    _sub.Font = Enum.Font.Gotham
+    _sub.TextSize = 12
+    _sub.ZIndex = 3
+    _sub.Parent = _panel
+
+    -- Separator line
+    local _sepLine = Instance.new("Frame")
+    _sepLine.Size = UDim2.new(1, -48, 0, 1)
+    _sepLine.Position = UDim2.new(0, 24, 0, 80)
+    _sepLine.BackgroundColor3 = Color3.fromRGB(100, 60, 160)
+    _sepLine.BorderSizePixel = 0
+    _sepLine.ZIndex = 3
+    _sepLine.Parent = _panel
+
+    -- Status / step label
+    local _step = Instance.new("TextLabel")
+    _step.Size = UDim2.new(1, 0, 0, 18)
+    _step.Position = UDim2.new(0, 0, 0, 88)
+    _step.BackgroundTransparency = 1
+    _step.Text = "⟳  Connecting to KeyAuth..."
+    _step.TextColor3 = Color3.fromRGB(160, 130, 200)
+    _step.Font = Enum.Font.Gotham
+    _step.TextSize = 12
+    _step.ZIndex = 3
+    _step.Parent = _panel
+
+    -- "Enter your license key" prompt
+    local _prmpt = Instance.new("TextLabel")
+    _prmpt.Size = UDim2.new(1, 0, 0, 18)
+    _prmpt.Position = UDim2.new(0, 0, 0, 108)
+    _prmpt.BackgroundTransparency = 1
+    _prmpt.Text = "Enter your license key:"
+    _prmpt.TextColor3 = Color3.fromRGB(220, 200, 255)
+    _prmpt.Font = Enum.Font.Gotham
+    _prmpt.TextSize = 12
+    _prmpt.Visible = false
+    _prmpt.ZIndex = 3
+    _prmpt.Parent = _panel
+
+    -- TextBox for key input
     local _tb = Instance.new("TextBox")
-    _tb.Size = UDim2.new(0, 410, 0, 34)
-    _tb.Position = UDim2.new(0.5, -205, 0, 118)
+    _tb.Size = UDim2.new(1, -80, 0, 34)
+    _tb.Position = UDim2.new(0, 40, 0, 130)
     _tb.BackgroundColor3 = Color3.fromRGB(28, 8, 58)
-    _tb.BackgroundTransparency = 0.18
+    _tb.BackgroundTransparency = 0.1
     _tb.BorderSizePixel = 0
     _tb.TextColor3 = Color3.fromRGB(255, 255, 255)
     _tb.PlaceholderText = ""
@@ -344,77 +350,119 @@ do
     _tb.TextSize = 14
     _tb.ClearTextOnFocus = false
     _tb.TextTruncate = Enum.TextTruncate.AtEnd
-    _tb.ZIndex = 3
+    _tb.ZIndex = 4
     _tb.Visible = false
-    _tb.Parent = _frame
+    _tb.Parent = _panel
 
-    -- Styled border around TextBox
     local _tbStroke = Instance.new("UIStroke")
-    _tbStroke.Color = AME.mid
+    _tbStroke.Color = Color3.fromRGB(160, 80, 255)
     _tbStroke.Thickness = 1.5
     _tbStroke.Parent = _tb
 
-    local _busy     = false
-    local _attempts = 0
+    -- Hint label at bottom
+    local _hint = Instance.new("TextLabel")
+    _hint.Size = UDim2.new(1, 0, 0, 18)
+    _hint.Position = UDim2.new(0, 0, 1, -26)
+    _hint.BackgroundTransparency = 1
+    _hint.Text = "Please wait..."
+    _hint.TextColor3 = Color3.fromRGB(120, 100, 160)
+    _hint.Font = Enum.Font.Gotham
+    _hint.TextSize = 11
+    _hint.ZIndex = 3
+    _hint.Parent = _panel
+
+    -- ── Drag logic ─────────────────────────────────────────────────────────────
+    -- Drag strip at the top of the panel (above the textbox)
+    local _dragStrip = Instance.new("Frame")
+    _dragStrip.Size = UDim2.new(1, 0, 0, 128)
+    _dragStrip.Position = UDim2.new(0, 0, 0, 0)
+    _dragStrip.BackgroundTransparency = 1
+    _dragStrip.BorderSizePixel = 0
+    _dragStrip.ZIndex = 5  -- above everything except textbox interaction
+    _dragStrip.Parent = _panel
+
+    local _dragging, _dragStart, _panelStart = false, nil, nil
+    _dragStrip.InputBegan:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            _dragging = true
+            _dragStart = inp.Position
+            _panelStart = _panel.Position
+        end
+    end)
+    _dragStrip.InputEnded:Connect(function(inp)
+        if inp.UserInputType == Enum.UserInputType.MouseButton1 then
+            _dragging = false
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(inp)
+        if _dragging and inp.UserInputType == Enum.UserInputType.MouseMovement then
+            local d = inp.Position - _dragStart
+            _panel.Position = UDim2.new(
+                _panelStart.X.Scale, _panelStart.X.Offset + d.X,
+                _panelStart.Y.Scale, _panelStart.Y.Offset + d.Y
+            )
+        end
+    end)
+
+    -- ── State ──────────────────────────────────────────────────────────────────
+    local _busy       = false
+    local _attempts   = 0
     local _inputReady = false
 
+    local function _setHint(txt, col)
+        _hint.Text = txt; _hint.TextColor3 = col
+    end
+
     local function _destroyAll()
-        for _,o in ipairs(_allDrawings) do pcall(function() o:Remove() end) end
         pcall(function() _gui:Destroy() end)
     end
 
     local function _fadeOut()
-        for _=0,20 do
-            for _,o in ipairs(_allDrawings) do
-                pcall(function() o.Transparency = math.min((o.Transparency or 0)+0.07,1) end)
-            end
-            pcall(function() _tb.BackgroundTransparency = math.min(_tb.BackgroundTransparency+0.07,1) end)
-            pcall(function() _tb.TextTransparency = math.min((_tb.TextTransparency or 0)+0.07,1) end)
-            task.wait(0.011)
+        for i = 0, 10 do
+            local t = i / 10
+            pcall(function() _overlay.BackgroundTransparency = 0.45 + t * 0.55 end)
+            pcall(function() _panel.BackgroundTransparency   = 0.05 + t * 0.95 end)
+            task.wait(0.016)
         end
         _destroyAll()
         _keyPassed = true
     end
 
-    local function _setHint(txt, col)
-        _hint.Text = txt; _hint.Color = col
-    end
-
     local function _validate(key)
-        local k = key:gsub("%s+","")
+        local k = key:gsub("%s+", "")
         if _busy or #k < 4 then return end
         _busy = true
         _tb.TextEditable = false
-        _tbStroke.Color = AME.light
-        _setHint("⟳  Checking key...", AME.light)
+        _tbStroke.Color = Color3.fromRGB(180, 160, 255)
+        _setHint("⟳  Checking key...", Color3.fromRGB(180, 160, 255))
 
         task.spawn(function()
             local ok, msg = _kaLicense(k)
             if ok then
                 pcall(function() if writefile then writefile("TravHub_v38_KAKey.txt", k) end end)
-                _tbStroke.Color = Color3.fromRGB(80,255,120)
-                _setHint("✦  Key accepted — loading hub...  ✦", Color3.fromRGB(80,255,120))
-                task.wait(0.7)
+                _tbStroke.Color = Color3.fromRGB(80, 255, 120)
+                _setHint("✦  Key accepted — loading hub...  ✦", Color3.fromRGB(80, 255, 120))
+                task.wait(0.8)
                 _fadeOut()
             else
                 _attempts += 1
-                _setHint(("✗  %s  (%d attempt%s)"):format(msg,_attempts,_attempts~=1 and "s" or ""), Color3.fromRGB(255,80,80))
-                _tbStroke.Color = Color3.fromRGB(255,80,80)
+                _setHint(("✗  %s  (%d attempt%s)"):format(msg, _attempts, _attempts ~= 1 and "s" or ""), Color3.fromRGB(255, 80, 80))
+                _tbStroke.Color = Color3.fromRGB(255, 80, 80)
                 _tb.Text = ""
                 _tb.TextEditable = true
-                _tb.Visible = true
-                task.spawn(function() task.wait(0.1); pcall(function() _tb:CaptureFocus() end) end)
                 _busy = false
-                task.wait(2.8)
+                task.wait(0.15)
+                pcall(function() _tb:CaptureFocus() end)
+                task.wait(2.5)
                 if not _keyPassed then
-                    _tbStroke.Color = AME.mid
-                    _setHint("Type or paste your key, then press ENTER", Color3.fromRGB(120,110,155))
+                    _tbStroke.Color = Color3.fromRGB(160, 80, 255)
+                    _setHint("Type or paste your key, then press ENTER", Color3.fromRGB(120, 100, 160))
                 end
             end
         end)
     end
 
-    -- Enter key submits
+    -- Enter submits
     _tb.FocusLost:Connect(function(enterPressed)
         if enterPressed and not _busy then
             _validate(_tb.Text)
@@ -426,40 +474,40 @@ do
         _prmpt.Visible = true
         _tb.Visible    = true
         _tb.TextEditable = true
-        task.spawn(function() task.wait(0.1); pcall(function() _tb:CaptureFocus() end) end)
-        _setHint("Type or paste your key, then press ENTER", Color3.fromRGB(120,110,155))
+        task.wait(0.1)
+        pcall(function() _tb:CaptureFocus() end)
+        _setHint("Type or paste your key, then press ENTER", Color3.fromRGB(120, 100, 160))
     end
 
-    -- ── Phase 1: init KeyAuth in background ────────────────────────────────────
+    -- ── Init KeyAuth ────────────────────────────────────────────────────────────
     task.spawn(function()
         local initOk, initMsg = _kaInit()
         if not initOk then
-            _step.Text  = "✗  "..initMsg
-            _step.Color = Color3.fromRGB(255,100,100)
-            _setHint("Could not reach KeyAuth — check connection.", Color3.fromRGB(255,100,100))
+            _step.Text = "✗  " .. initMsg
+            _step.TextColor3 = Color3.fromRGB(255, 100, 100)
+            _setHint("Could not reach KeyAuth — retrying...", Color3.fromRGB(255, 100, 100))
             task.wait(3)
             initOk, initMsg = _kaInit()
             if not initOk then
-                warn("[TravHub KeyAuth] Init failed: "..initMsg)
+                warn("[TravHub KeyAuth] Init failed: " .. initMsg)
                 _fadeOut(); return
             end
         end
 
-        _step.Text  = "✦  Connected to KeyAuth"
-        _step.Color = Color3.fromRGB(100,255,160)
+        _step.Text = "✦  Connected to KeyAuth"
+        _step.TextColor3 = Color3.fromRGB(100, 255, 160)
         task.wait(0.4)
         _inputReady = true
 
         if _savedKey ~= "" then
-            -- Auto-validate saved key silently
-            _setHint("⟳  Checking saved key...", AME.light)
+            _setHint("⟳  Checking saved key...", Color3.fromRGB(180, 160, 255))
             _validate(_savedKey)
         else
             _showInputUI()
         end
     end)
 
-    -- Block until key passes
+    -- Block main thread until validated
     while not _keyPassed do task.wait(0.05) end
 end  -- end key gate scope
 
