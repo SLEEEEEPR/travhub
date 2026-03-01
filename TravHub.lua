@@ -396,7 +396,7 @@ do
         end)
     end
 
-    -- Keyboard input connection
+    -- Keyboard input connection (proc=true blocks Ctrl+V so we split into two connections)
     local _inConn = UserInputService.InputBegan:Connect(function(inp, proc)
         if proc or _busy or not _inputReady then return end
         local kc = inp.KeyCode
@@ -404,18 +404,26 @@ do
             _validate()
         elseif kc == Enum.KeyCode.Backspace then
             if #_buf > 0 then _buf = _buf:sub(1,-2); _refreshDisplay() end
-        elseif kc == Enum.KeyCode.V and _isCtrl() then
-            local pasted = _getClipboard()
-            pasted = pasted:gsub("[%s\n\r]",""):sub(1,64)
-            if #pasted > 0 then
-                _buf = pasted; _refreshDisplay()
-                _hint.Text = "✦  Key pasted — press ENTER to confirm"
-                _hint.Color = AME.light
-            end
         else
             local map = _isShift() and _KMAP_UP or _KMAP_LO
             local ch = map[kc]
-            if ch and #_buf < 64 then _buf = _buf..ch; _refreshDisplay() end
+            if ch and #_buf < 100 then _buf = _buf..ch; _refreshDisplay() end
+        end
+    end)
+
+    -- Separate connection for Ctrl+V — intentionally ignores proc so paste
+    -- always fires even when the game tries to consume the input
+    local _pasteConn = UserInputService.InputBegan:Connect(function(inp, _proc)
+        if _busy or not _inputReady then return end
+        if inp.KeyCode ~= Enum.KeyCode.V then return end
+        if not _isCtrl() then return end
+        local pasted = _getClipboard()
+        pasted = pasted:gsub("[%s\n\r]", ""):sub(1, 100)
+        if #pasted > 0 then
+            _buf = pasted
+            _refreshDisplay()
+            _hint.Text  = "✦  Key pasted — press ENTER to confirm"
+            _hint.Color = AME.light
         end
     end)
 
@@ -464,8 +472,9 @@ do
     -- Block main thread until validated
     while not _keyPassed do task.wait(0.05) end
 
-    pcall(function() _inConn:Disconnect()    end)
-    pcall(function() _blinkConn:Disconnect() end)
+    pcall(function() _inConn:Disconnect()     end)
+    pcall(function() _pasteConn:Disconnect()  end)
+    pcall(function() _blinkConn:Disconnect()  end)
 end  -- end key gate scope
 
 -- ══════════════════════════════════════════
