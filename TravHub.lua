@@ -122,9 +122,9 @@ local AME = {
 --   3. Generate license keys at keyauth.cc/app → Licenses tab
 --      Hand them out via Discord or sell via Sellix
 -- ═════════════════════════════════════════════════════════════════════
-local KA_NAME    = "YOUR_APP_NAME"    -- App name (shown above the secret on dashboard)
-local KA_OWNERID = "YOUR_OWNER_ID"   -- Account Settings → Owner ID (top-right profile)
-local KA_SECRET  = "YOUR_APP_SECRET" -- Licenses tab → blurred text (App secret)
+local KA_NAME    = "Mermorz's Application"    -- App name (shown above the secret on dashboard)
+local KA_OWNERID = "hLIkGaxr8u"   -- Account Settings → Owner ID (top-right profile)
+local KA_SECRET  = "7f2253965f73618809126cba1ff66693c04f82888535c82709f9c17c9ceafdc1" -- Licenses tab → blurred text (App secret)
 local KA_VER     = "1.0"             -- Leave as 1.0 unless you changed it on dashboard
 local KA_URL     = "https://keyauth.win/api/1.2/"
 
