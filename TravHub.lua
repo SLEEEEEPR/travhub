@@ -233,246 +233,174 @@ do
     local _pW, _pH = 490, 250
     local _pX, _pY = _scx - _pW*0.5, _scy - _pH*0.5
 
-    -- ── Drawings ───────────────────────────────────────────────────────────────
-    local _bg    = NewDraw("Square",{Visible=true,Filled=true, Color=Color3.new(0,0,0),     Transparency=0.30,Position=Vector2.new(0,0),         Size=Vector2.new(_vp.X,_vp.Y)})
-    local _panel = NewDraw("Square",{Visible=true,Filled=true, Color=AME.deep,              Transparency=0.06,Position=Vector2.new(_pX,_pY),     Size=Vector2.new(_pW,_pH)})
-    local _bord  = NewDraw("Square",{Visible=true,Filled=false,Color=AME.mid,               Thickness=2,     Position=Vector2.new(_pX,_pY),     Size=Vector2.new(_pW,_pH)})
-    local _ibord = NewDraw("Square",{Visible=true,Filled=false,Color=AME.dark,              Thickness=1,     Position=Vector2.new(_pX+4,_pY+4), Size=Vector2.new(_pW-8,_pH-8)})
-
-    -- Crystal corner accents
+    -- ── Drawing decorations (background, borders, title) ──────────────────────
+    local _bg    = NewDraw("Square",{Visible=true,Filled=true, Color=Color3.new(0,0,0),Transparency=0.30,Position=Vector2.new(0,0),        Size=Vector2.new(_vp.X,_vp.Y)})
+    local _panel = NewDraw("Square",{Visible=true,Filled=true, Color=AME.deep,         Transparency=0.06,Position=Vector2.new(_pX,_pY),    Size=Vector2.new(_pW,_pH)})
+    local _bord  = NewDraw("Square",{Visible=true,Filled=false,Color=AME.mid,          Thickness=2,     Position=Vector2.new(_pX,_pY),    Size=Vector2.new(_pW,_pH)})
+    local _ibord = NewDraw("Square",{Visible=true,Filled=false,Color=AME.dark,         Thickness=1,     Position=Vector2.new(_pX+4,_pY+4),Size=Vector2.new(_pW-8,_pH-8)})
     local _crys = {
-        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX,       _pY),       To=Vector2.new(_pX+22,     _pY)}),
-        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX,       _pY),       To=Vector2.new(_pX,        _pY+22)}),
-        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX+_pW,   _pY),       To=Vector2.new(_pX+_pW-22, _pY)}),
-        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX+_pW,   _pY),       To=Vector2.new(_pX+_pW,    _pY+22)}),
-        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX,       _pY+_pH),   To=Vector2.new(_pX+22,     _pY+_pH)}),
-        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX,       _pY+_pH),   To=Vector2.new(_pX,        _pY+_pH-22)}),
-        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX+_pW,   _pY+_pH),   To=Vector2.new(_pX+_pW-22, _pY+_pH)}),
-        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX+_pW,   _pY+_pH),   To=Vector2.new(_pX+_pW,    _pY+_pH-22)}),
+        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX,     _pY),     To=Vector2.new(_pX+22,    _pY)}),
+        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX,     _pY),     To=Vector2.new(_pX,       _pY+22)}),
+        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX+_pW, _pY),     To=Vector2.new(_pX+_pW-22,_pY)}),
+        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX+_pW, _pY),     To=Vector2.new(_pX+_pW,   _pY+22)}),
+        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX,     _pY+_pH), To=Vector2.new(_pX+22,    _pY+_pH)}),
+        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX,     _pY+_pH), To=Vector2.new(_pX,       _pY+_pH-22)}),
+        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX+_pW, _pY+_pH), To=Vector2.new(_pX+_pW-22,_pY+_pH)}),
+        NewDraw("Line",{Visible=true,Thickness=1.5,Color=AME.bright,From=Vector2.new(_pX+_pW, _pY+_pH), To=Vector2.new(_pX+_pW,   _pY+_pH-22)}),
     }
+    local _ttl  = NewDraw("Text",{Visible=true,Text="TRAV HUB",Size=40,Center=true,Outline=true,OutlineColor=AME.dark,Color=AME.bright,Position=Vector2.new(_scx,_pY+12),Font=Drawing.Fonts.GothamBold})
+    local _sub  = NewDraw("Text",{Visible=true,Text="Project Delta  ·  Crystal Edition  ·  v3.8",Size=12,Center=true,Outline=true,OutlineColor=Color3.new(0,0,0),Color=AME.light,Position=Vector2.new(_scx,_pY+56),Font=Drawing.Fonts.Gotham})
+    local _sep  = NewDraw("Line",{Visible=true,Color=AME.mid,Thickness=1,Transparency=0.45,From=Vector2.new(_pX+24,_pY+74),To=Vector2.new(_pX+_pW-24,_pY+74)})
+    local _step = NewDraw("Text",{Visible=true,Text="⟳  Connecting to KeyAuth...",Size=12,Center=true,Outline=true,OutlineColor=Color3.new(0,0,0),Color=AME.light,Position=Vector2.new(_scx,_pY+82),Font=Drawing.Fonts.Gotham})
+    local _prmpt= NewDraw("Text",{Visible=false,Text="Enter your license key:",Size=12,Center=true,Outline=true,OutlineColor=Color3.new(0,0,0),Color=AME.white,Position=Vector2.new(_scx,_pY+100),Font=Drawing.Fonts.Gotham})
+    local _hint = NewDraw("Text",{Visible=true,Text="Please wait...",Size=11,Center=true,Outline=true,OutlineColor=Color3.new(0,0,0),Color=Color3.fromRGB(120,110,155),Position=Vector2.new(_scx,_pY+_pH-22),Font=Drawing.Fonts.Gotham})
 
-    -- Text labels
-    local _ttl   = NewDraw("Text",{Visible=true,Text="TRAV HUB",                                     Size=40,Center=true,Outline=true,OutlineColor=AME.dark,    Color=AME.bright,                    Position=Vector2.new(_scx,_pY+12),    Font=Drawing.Fonts.GothamBold})
-    local _sub   = NewDraw("Text",{Visible=true,Text="Project Delta  ·  Crystal Edition  ·  v3.8",   Size=12,Center=true,Outline=true,OutlineColor=Color3.new(0,0,0),Color=AME.light,              Position=Vector2.new(_scx,_pY+56),    Font=Drawing.Fonts.Gotham})
-    local _sep   = NewDraw("Line", {Visible=true,Color=AME.mid,Thickness=1,Transparency=0.45,From=Vector2.new(_pX+24,_pY+74), To=Vector2.new(_pX+_pW-24,_pY+74)})
-    local _step  = NewDraw("Text",{Visible=true,Text="⟳  Connecting to KeyAuth...",                  Size=12,Center=true,Outline=true,OutlineColor=Color3.new(0,0,0),Color=AME.light,              Position=Vector2.new(_scx,_pY+82),    Font=Drawing.Fonts.Gotham})
-    local _prmpt = NewDraw("Text",{Visible=true,Text="Enter your license key:",                       Size=12,Center=true,Outline=true,OutlineColor=Color3.new(0,0,0),Color=AME.white,              Position=Vector2.new(_scx,_pY+100),   Font=Drawing.Fonts.Gotham})
-    _prmpt.Visible = false
+    local _allDrawings = {_bg,_panel,_bord,_ibord,_ttl,_sub,_sep,_step,_prmpt,_hint}
+    for _,c in ipairs(_crys) do tinsert(_allDrawings,c) end
 
-    -- Input box
-    local _iW, _iH = 410, 34
-    local _iX, _iY = _scx - _iW*0.5, _pY + 118
-    local _iBox  = NewDraw("Square",{Visible=false,Filled=true, Color=Color3.fromRGB(28,8,58), Transparency=0.18,Position=Vector2.new(_iX,_iY),Size=Vector2.new(_iW,_iH)})
-    local _iBord2= NewDraw("Square",{Visible=false,Filled=false,Color=AME.mid,                 Thickness=1.5,   Position=Vector2.new(_iX,_iY),Size=Vector2.new(_iW,_iH)})
-    local _iTxt  = NewDraw("Text",  {Visible=false,Text="",Size=13,Center=true,Outline=true,OutlineColor=Color3.new(0,0,0),Color=AME.white,Position=Vector2.new(_scx,_iY+8),Font=Drawing.Fonts.Gotham})
-    local _cur   = NewDraw("Line",  {Visible=false,Color=AME.bright,Thickness=1.5,From=Vector2.new(_scx,_iY+7),To=Vector2.new(_scx,_iY+27)})
+    -- ── Real ScreenGui TextBox for input (native paste/typing support) ─────────
+    local _gui = Instance.new("ScreenGui")
+    _gui.Name = "TravHubKeyGate"
+    _gui.ResetOnSpawn = false
+    _gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    pcall(function() _gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end)
 
-    local _hint  = NewDraw("Text",{Visible=true,Text="Please wait...",Size=11,Center=true,Outline=true,OutlineColor=Color3.new(0,0,0),Color=Color3.fromRGB(120,110,155),Position=Vector2.new(_scx,_pY+_pH-22),Font=Drawing.Fonts.Gotham})
+    -- Invisible frame sized to panel
+    local _frame = Instance.new("Frame")
+    _frame.Size = UDim2.new(0, _pW, 0, _pH)
+    _frame.Position = UDim2.new(0, _pX, 0, _pY)
+    _frame.BackgroundTransparency = 1
+    _frame.BorderSizePixel = 0
+    _frame.Parent = _gui
 
-    -- All objects list for bulk ops
-    local _all = {_bg,_panel,_bord,_ibord,_ttl,_sub,_sep,_step,_prmpt,_iBox,_iBord2,_iTxt,_cur,_hint}
-    for _,c in ipairs(_crys) do tinsert(_all, c) end
+    -- TextBox positioned over the input area
+    local _tb = Instance.new("TextBox")
+    _tb.Size = UDim2.new(0, 410, 0, 34)
+    _tb.Position = UDim2.new(0.5, -205, 0, 118)
+    _tb.BackgroundColor3 = Color3.fromRGB(28, 8, 58)
+    _tb.BackgroundTransparency = 0.18
+    _tb.BorderSizePixel = 0
+    _tb.TextColor3 = Color3.fromRGB(255, 255, 255)
+    _tb.PlaceholderText = "Paste or type your key here..."
+    _tb.PlaceholderColor3 = Color3.fromRGB(100, 85, 130)
+    _tb.Font = Enum.Font.Gotham
+    _tb.TextSize = 14
+    _tb.ClearTextOnFocus = false
+    _tb.TextTruncate = Enum.TextTruncate.AtEnd
+    _tb.Visible = false
+    _tb.Parent = _frame
+
+    -- Styled border around TextBox
+    local _tbStroke = Instance.new("UIStroke")
+    _tbStroke.Color = AME.mid
+    _tbStroke.Thickness = 1.5
+    _tbStroke.Parent = _tb
+
+    local _busy     = false
+    local _attempts = 0
+    local _inputReady = false
 
     local function _destroyAll()
-        for _,o in ipairs(_all) do pcall(function() o:Remove() end) end
+        for _,o in ipairs(_allDrawings) do pcall(function() o:Remove() end) end
+        pcall(function() _gui:Destroy() end)
     end
 
     local function _fadeOut()
         for _=0,20 do
-            for _,o in ipairs(_all) do
-                pcall(function() o.Transparency = math.min((o.Transparency or 0)+0.07, 1) end)
+            for _,o in ipairs(_allDrawings) do
+                pcall(function() o.Transparency = math.min((o.Transparency or 0)+0.07,1) end)
             end
+            pcall(function() _tb.BackgroundTransparency = math.min(_tb.BackgroundTransparency+0.07,1) end)
+            pcall(function() _tb.TextTransparency = math.min((_tb.TextTransparency or 0)+0.07,1) end)
             task.wait(0.011)
         end
         _destroyAll()
         _keyPassed = true
     end
 
-    local function _showInputUI()
-        _step.Visible    = false
-        _prmpt.Visible   = true
-        _iBox.Visible    = true
-        _iBord2.Visible  = true
-        _iTxt.Visible    = true
-        _cur.Visible     = true
-        _hint.Text       = "ENTER = confirm  ·  Get your key from the Discord"
-        _hint.Color      = Color3.fromRGB(120,110,155)
+    local function _setHint(txt, col)
+        _hint.Text = txt; _hint.Color = col
     end
 
-    -- ── KeyCode → char map ──────────────────────────────────────────────────────
-    local _KMAP_UP = {
-        [Enum.KeyCode.A]="A",[Enum.KeyCode.B]="B",[Enum.KeyCode.C]="C",[Enum.KeyCode.D]="D",
-        [Enum.KeyCode.E]="E",[Enum.KeyCode.F]="F",[Enum.KeyCode.G]="G",[Enum.KeyCode.H]="H",
-        [Enum.KeyCode.I]="I",[Enum.KeyCode.J]="J",[Enum.KeyCode.K]="K",[Enum.KeyCode.L]="L",
-        [Enum.KeyCode.M]="M",[Enum.KeyCode.N]="N",[Enum.KeyCode.O]="O",[Enum.KeyCode.P]="P",
-        [Enum.KeyCode.Q]="Q",[Enum.KeyCode.R]="R",[Enum.KeyCode.S]="S",[Enum.KeyCode.T]="T",
-        [Enum.KeyCode.U]="U",[Enum.KeyCode.V]="V",[Enum.KeyCode.W]="W",[Enum.KeyCode.X]="X",
-        [Enum.KeyCode.Y]="Y",[Enum.KeyCode.Z]="Z",
-        [Enum.KeyCode.Zero]="0",[Enum.KeyCode.One]="1",[Enum.KeyCode.Two]="2",
-        [Enum.KeyCode.Three]="3",[Enum.KeyCode.Four]="4",[Enum.KeyCode.Five]="5",
-        [Enum.KeyCode.Six]="6",[Enum.KeyCode.Seven]="7",[Enum.KeyCode.Eight]="8",
-        [Enum.KeyCode.Nine]="9",
-        [Enum.KeyCode.Minus]="-",[Enum.KeyCode.Period]=".",[Enum.KeyCode.Slash]="/",
-    }
-    local _KMAP_LO = {
-        [Enum.KeyCode.A]="a",[Enum.KeyCode.B]="b",[Enum.KeyCode.C]="c",[Enum.KeyCode.D]="d",
-        [Enum.KeyCode.E]="e",[Enum.KeyCode.F]="f",[Enum.KeyCode.G]="g",[Enum.KeyCode.H]="h",
-        [Enum.KeyCode.I]="i",[Enum.KeyCode.J]="j",[Enum.KeyCode.K]="k",[Enum.KeyCode.L]="l",
-        [Enum.KeyCode.M]="m",[Enum.KeyCode.N]="n",[Enum.KeyCode.O]="o",[Enum.KeyCode.P]="p",
-        [Enum.KeyCode.Q]="q",[Enum.KeyCode.R]="r",[Enum.KeyCode.S]="s",[Enum.KeyCode.T]="t",
-        [Enum.KeyCode.U]="u",[Enum.KeyCode.V]="v",[Enum.KeyCode.W]="w",[Enum.KeyCode.X]="x",
-        [Enum.KeyCode.Y]="y",[Enum.KeyCode.Z]="z",
-        [Enum.KeyCode.Zero]="0",[Enum.KeyCode.One]="1",[Enum.KeyCode.Two]="2",
-        [Enum.KeyCode.Three]="3",[Enum.KeyCode.Four]="4",[Enum.KeyCode.Five]="5",
-        [Enum.KeyCode.Six]="6",[Enum.KeyCode.Seven]="7",[Enum.KeyCode.Eight]="8",
-        [Enum.KeyCode.Nine]="9",
-        [Enum.KeyCode.Minus]="-",[Enum.KeyCode.Period]=".",[Enum.KeyCode.Slash]="/",
-    }
-
-    local _buf        = _savedKey
-    local _busy       = false
-    local _attempts   = 0
-    local _inputReady = false
-
-    local function _isShift()
-        return UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
-            or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
-    end
-    local function _isCtrl()
-        return UserInputService:IsKeyDown(Enum.KeyCode.LeftControl)
-            or UserInputService:IsKeyDown(Enum.KeyCode.RightControl)
-    end
-    local function _getClipboard()
-        local t = ""
-        pcall(function() t = getclipboard() or "" end)
-        if t ~= "" then return t end
-        pcall(function() t = Clipboard.get() or "" end)
-        if t ~= "" then return t end
-        pcall(function() t = syn.get_clipboard() or "" end)
-        return t
-    end
-
-    local function _refreshDisplay()
-        local show = #_buf <= 4
-            and _buf
-            or string.rep("*", #_buf-4).._buf:sub(-4)
-        _iTxt.Text = show
-        local offset = #show * 3.6
-        _cur.From = Vector2.new(_scx + offset, _iY+7)
-        _cur.To   = Vector2.new(_scx + offset, _iY+27)
-    end
-
-    local function _validate()
-        if _busy or #_buf < 4 then return end
+    local function _validate(key)
+        local k = key:gsub("%s+","")
+        if _busy or #k < 4 then return end
         _busy = true
-        _hint.Text  = "⟳  Checking key..."; _hint.Color = AME.light
-        _iBord2.Color = AME.light; _cur.Visible = false
+        _tb.Visible = false
+        _tbStroke.Color = AME.light
+        _setHint("⟳  Checking key...", AME.light)
 
         task.spawn(function()
-            local ok, msg = _kaLicense(_buf)
+            local ok, msg = _kaLicense(k)
             if ok then
-                pcall(function() if writefile then writefile("TravHub_v38_KAKey.txt", _buf) end end)
-                _hint.Text = "✦  Key accepted — loading hub...  ✦"
-                _hint.Color = Color3.fromRGB(80,255,120)
-                _iBord2.Color = Color3.fromRGB(80,255,120)
+                pcall(function() if writefile then writefile("TravHub_v38_KAKey.txt", k) end end)
+                _tbStroke.Color = Color3.fromRGB(80,255,120)
+                _setHint("✦  Key accepted — loading hub...  ✦", Color3.fromRGB(80,255,120))
                 task.wait(0.7)
                 _fadeOut()
             else
                 _attempts += 1
-                _hint.Text  = ("✗  %s  (%d attempt%s)"):format(msg, _attempts, _attempts~=1 and "s" or "")
-                _hint.Color  = Color3.fromRGB(255,80,80)
-                _iBord2.Color = Color3.fromRGB(255,80,80)
-                _buf = ""
-                _refreshDisplay()
+                _setHint(("✗  %s  (%d attempt%s)"):format(msg,_attempts,_attempts~=1 and "s" or ""), Color3.fromRGB(255,80,80))
+                _tbStroke.Color = Color3.fromRGB(255,80,80)
+                _tb.Text = ""
+                _tb.Visible = true
+                task.spawn(function() pcall(function() _tb:CaptureFocus() end) end)
                 _busy = false
                 task.wait(2.8)
                 if not _keyPassed then
-                    _hint.Text  = "ENTER = confirm  ·  Get your key from the Discord"
-                    _hint.Color  = Color3.fromRGB(120,110,155)
-                    _iBord2.Color = AME.mid
-                    _cur.Visible = true
+                    _tbStroke.Color = AME.mid
+                    _setHint("Click the box, type or paste your key, press ENTER", Color3.fromRGB(120,110,155))
                 end
             end
         end)
     end
 
-    -- Keyboard input connection
-    local _inConn = UserInputService.InputBegan:Connect(function(inp, proc)
-        if proc or _busy or not _inputReady then return end
-        local kc = inp.KeyCode
-        if kc == Enum.KeyCode.Return or kc == Enum.KeyCode.KeypadEnter then
-            _validate()
-        elseif kc == Enum.KeyCode.Backspace then
-            if #_buf > 0 then _buf = _buf:sub(1,-2); _refreshDisplay() end
-        else
-            local map = _isShift() and _KMAP_UP or _KMAP_LO
-            local ch = map[kc]
-            if ch and #_buf < 100 then _buf = _buf..ch; _refreshDisplay() end
+    -- Enter key submits
+    _tb.FocusLost:Connect(function(enterPressed)
+        if enterPressed and not _busy then
+            _validate(_tb.Text)
         end
     end)
 
-    -- Ctrl+V paste via Heartbeat polling — bypasses proc entirely
-    local _lastPaste = 0
-    local _blinkConn = RunService.Heartbeat:Connect(function()
-        if _inputReady and not _busy then
-            _cur.Visible = (tick() % 1 < 0.55)
-            -- Poll for Ctrl+V (0.3s debounce so it doesn't fire repeatedly)
-            if _isCtrl() and UserInputService:IsKeyDown(Enum.KeyCode.V) then
-                if tick() - _lastPaste > 0.3 then
-                    _lastPaste = tick()
-                    local pasted = _getClipboard()
-                    pasted = pasted:gsub("[%s\n\r]", ""):sub(1, 100)
-                    if #pasted > 0 then
-                        _buf = pasted
-                        _refreshDisplay()
-                        _hint.Text  = "✦  Key pasted — press ENTER to confirm"
-                        _hint.Color = AME.light
-                    end
-                end
-            end
-        end
-    end)
+    local function _showInputUI()
+        _step.Visible  = false
+        _prmpt.Visible = true
+        _tb.Visible    = true
+        task.spawn(function() pcall(function() _tb:CaptureFocus() end) end)
+        _setHint("Click the box, type or paste your key, press ENTER", Color3.fromRGB(120,110,155))
+    end
 
-    -- ── Phase 1: run init in background, show UI once ready ────────────────────
+    -- ── Phase 1: init KeyAuth in background ────────────────────────────────────
     task.spawn(function()
         local initOk, initMsg = _kaInit()
         if not initOk then
-            -- Init failed — show error but still allow manual retry via button
             _step.Text  = "✗  "..initMsg
             _step.Color = Color3.fromRGB(255,100,100)
-            _hint.Text  = "Could not reach KeyAuth — check your connection."
-            _hint.Color = Color3.fromRGB(255,100,100)
+            _setHint("Could not reach KeyAuth — check connection.", Color3.fromRGB(255,100,100))
             task.wait(3)
-            -- Retry once
             initOk, initMsg = _kaInit()
             if not initOk then
-                -- Hard fail — destroy and skip gate (fail open so hub still loads)
-                warn("[TravHub KeyAuth] Init failed after retry: "..initMsg)
-                _fadeOut()
-                return
+                warn("[TravHub KeyAuth] Init failed: "..initMsg)
+                _fadeOut(); return
             end
         end
 
-        -- Init succeeded — show input UI
         _step.Text  = "✦  Connected to KeyAuth"
         _step.Color = Color3.fromRGB(100,255,160)
         task.wait(0.4)
-        _showInputUI()
         _inputReady = true
-        _refreshDisplay()
 
-        -- Auto-validate if a saved key was pre-loaded
         if _savedKey ~= "" then
-            task.wait(0.12)
-            _validate()
+            -- Auto-validate saved key silently
+            _setHint("⟳  Checking saved key...", AME.light)
+            _validate(_savedKey)
+        else
+            _showInputUI()
         end
     end)
 
-    -- Block main thread until validated
+    -- Block until key passes
     while not _keyPassed do task.wait(0.05) end
-
-    pcall(function() _inConn:Disconnect()    end)
-    pcall(function() _blinkConn:Disconnect() end)
 end  -- end key gate scope
 
 -- ══════════════════════════════════════════
