@@ -652,20 +652,37 @@ local State = {
     AIESPNames=true, AIESPHealth=true, AIESPTracers=false,
     AIESPMaxDist=400, AIESPRainbow=false,
 
+    -- AI Aimbot
+    AIAimbotEnabled=false, AIAimbotMode="Smooth", AIAimbotFOV=150,
+    AIAimbotSmooth=0.10, AIAimbotBlatant=0.55, AIAimbotPart="Head",
+    AIAimbotLock=false, AIAimbotKey="MouseButton2",
+    AIFOVColor=Color3.fromRGB(255,160,30), AIFOVVisible=true,
+
     -- Loot ESP
     LootESPEnabled=false, LootMaxDist=300, LootTextSize=12,
-    LootFilter={Keys=true,Bodies=true,Weapons=true,Ammo=true,Medical=true,Valuables=true,Containers=true,Other=false},
+    LootFilter={Keys=true,Bodies=true,Weapons=true,Ammo=true,Medical=true,Valuables=true,Containers=true,Armor=true,Explosives=true,Tools=true,Other=false},
     LootColors={
-        Keys=Color3.fromRGB(255,230,50), Bodies=Color3.fromRGB(200,80,80),
-        Weapons=Color3.fromRGB(255,100,50), Ammo=Color3.fromRGB(255,200,50),
-        Medical=Color3.fromRGB(80,255,120), Valuables=Color3.fromRGB(200,160,255),
-        Containers=Color3.fromRGB(100,180,255), Other=Color3.fromRGB(180,180,180),
+        Keys=Color3.fromRGB(255,230,50),       Bodies=Color3.fromRGB(200,80,80),
+        Weapons=Color3.fromRGB(255,100,50),     Ammo=Color3.fromRGB(255,200,50),
+        Medical=Color3.fromRGB(80,255,120),     Valuables=Color3.fromRGB(200,160,255),
+        Containers=Color3.fromRGB(100,180,255), Armor=Color3.fromRGB(100,200,255),
+        Explosives=Color3.fromRGB(255,80,50),   Tools=Color3.fromRGB(200,200,100),
+        Other=Color3.fromRGB(180,180,180),
     },
 
     -- Exfil ESP
     ExfilESPEnabled=false, ExfilColor=Color3.fromRGB(80,255,140),
     ExfilMaxDist=2000, ExfilShowDist=true, ExfilArrow=true,
     ExfilRainbow=false, ExfilPulse=true,
+
+    -- Trap ESP
+    TrapESPEnabled=false, TrapMaxDist=150,
+    TrapPulse=true, TrapShowName=true, TrapShowDist=true,
+    TrapDangerRadius=true, TrapDangerRadiusSize=8,
+    TrapColorMine=Color3.fromRGB(255,50,50),
+    TrapColorClaymore=Color3.fromRGB(255,120,0),
+    TrapColorWire=Color3.fromRGB(255,220,0),
+    TrapColorGeneric=Color3.fromRGB(255,80,80),
 
     -- Aimbot
     AimbotEnabled=false, AimbotMode="Smooth", SilentAim=false,
@@ -1162,6 +1179,97 @@ local function KillAIESP(m)
 end
 KillAIESP_fn = KillAIESP  -- resolve forward ref from DescendantRemoving signal
 
+-- ══════════════════════════════════════════
+--  AI AIMBOT
+-- ══════════════════════════════════════════
+local aiLockedTarget = nil
+local lastAITargetPos = {}
+local AILockDot = NewDraw("Circle",{Visible=false,Filled=true,Color=Color3.fromRGB(255,160,30),Radius=4,NumSides=16,Thickness=0})
+local AIFOVCircle = NewDraw("Circle",{Visible=false,Thickness=1.5,Color=Color3.fromRGB(255,160,30),Filled=false,NumSides=64})
+
+local function GetBestAITarget()
+    local cx=VP_CX; local cy=VP_CY
+    -- Maintain lock if still valid
+    if State.AIAimbotLock and aiLockedTarget then
+        local m=aiLockedTarget
+        local entry=aiCandidates[m]
+        if entry and m.Parent and entry.hum.Health>0 then
+            local part=m:FindFirstChild(State.AIAimbotPart) or entry.root
+            if part then
+                local sp,on=W2S(part.Position)
+                if on then
+                    local dx=sp.X-cx; local dy=sp.Y-cy
+                    if (dx*dx+dy*dy)^0.5<State.AIAimbotFOV then return m end
+                end
+            end
+        end
+        aiLockedTarget=nil
+    end
+    local best,bd=nil,math.huge
+    for m,entry in pairs(aiCandidates) do
+        if not m.Parent then continue end
+        if entry.hum.Health<=0 then continue end
+        local part=m:FindFirstChild(State.AIAimbotPart) or entry.root
+        if part then
+            local sp,on=W2S(part.Position)
+            if on then
+                local dx=sp.X-cx; local dy=sp.Y-cy
+                local d=(dx*dx+dy*dy)^0.5
+                if d<State.AIAimbotFOV and d<bd then bd=d; best=m end
+            end
+        end
+    end
+    if best and State.AIAimbotLock then aiLockedTarget=best end
+    return best
+end
+
+local function RunAIAimbot(camCF)
+    -- FOV circle
+    AIFOVCircle.Position=Vector2.new(VP_CX,VP_CY)
+    AIFOVCircle.Radius=State.AIAimbotFOV
+    AIFOVCircle.Color=State.AIFOVColor
+    AIFOVCircle.Visible=State.AIAimbotEnabled and State.AIFOVVisible
+
+    if not State.AIAimbotEnabled then AILockDot.Visible=false; return end
+
+    local target=GetBestAITarget()
+    if target then
+        local entry=aiCandidates[target]
+        if entry then
+            local part=target:FindFirstChild(State.AIAimbotPart) or entry.root
+            if part then
+                local sp,on=W2S(part.Position)
+                AILockDot.Position=sp; AILockDot.Visible=on
+            end
+        end
+    else AILockDot.Visible=false end
+
+    -- Respect same aim key as player aimbot
+    local fn=AimKeyMap[State.AIAimbotKey]; local keyDown=fn and fn() or false
+    if not keyDown or not target then return end
+
+    local entry=aiCandidates[target]; if not entry then return end
+    local part=target:FindFirstChild(State.AIAimbotPart) or entry.root
+    if not part then return end
+
+    -- Simple prediction using last known pos
+    local pos=part.Position
+    local prev=lastAITargetPos[target]; lastAITargetPos[target]=pos
+    local aimPos=pos
+    if prev then aimPos=pos+(pos-prev)*3 end
+
+    local targetCF=CFrame.new(camCF.Position,aimPos)
+    if State.AIAimbotMode=="Instant" then
+        pcall(function() Camera.CFrame=targetCF end)
+    elseif State.AIAimbotMode=="Blatant" then
+        pcall(function() Camera.CFrame=camCF:Lerp(targetCF,State.AIAimbotBlatant) end)
+    else
+        local sp=W2S(aimPos); local dx=sp.X-VP_CX; local dy=sp.Y-VP_CY
+        local dyn=mclamp(State.AIAimbotSmooth+(dx*dx+dy*dy)^0.5/State.AIAimbotFOV*0.08,State.AIAimbotSmooth,0.35)
+        pcall(function() Camera.CFrame=camCF:Lerp(targetCF,dyn) end)
+    end
+end
+
 local function UpdateAIESP(myRoot)
     -- No scan timer: aiCandidates kept live by DescendantAdded/Removing signals
     if not State.AIESPEnabled then
@@ -1233,17 +1341,120 @@ end
 --  LOOT ESP  (deferred scan)
 -- ══════════════════════════════════════════
 local LootESPObjects={}
+
+-- Parts/models that are ALWAYS ignored — catches player face hitboxes, map geometry, etc.
+local LOOT_BLACKLIST={
+    -- Character body parts (R15 + R6 + common hitbox names)
+    Head=true, Face=true, Torso=true, HumanoidRootPart=true,
+    UpperTorso=true, LowerTorso=true,
+    ["Left Arm"]=true,  ["Right Arm"]=true,
+    ["Left Leg"]=true,  ["Right Leg"]=true,
+    LeftUpperArm=true,  RightUpperArm=true,
+    LeftLowerArm=true,  RightLowerArm=true,
+    LeftHand=true,      RightHand=true,
+    LeftUpperLeg=true,  RightUpperLeg=true,
+    LeftLowerLeg=true,  RightLowerLeg=true,
+    LeftFoot=true,      RightFoot=true,
+    -- Common map/game objects that aren't loot
+    Baseplate=true, Terrain=true, SpawnLocation=true,
+    Sky=true, Sun=true, Part=true, UnionOperation=true,
+    Decal=true, Texture=true, SpecialMesh=true,
+    -- Hitbox parts (blank name filtered separately)
+}
+
 local LOOT_CATS={
-    Keys      ={"key","keycard","access","passcard","id card","badge"},
-    Bodies    ={"body","corpse","dead","ragdoll","remains","victim"},
-    Weapons   ={"gun","pistol","rifle","shotgun","smg","sniper","knife","sword","axe","weapon","firearm","blade"},
-    Ammo      ={"ammo","bullet","magazine","mag","round","shell","clip"},
-    Medical   ={"medkit","bandage","health","heal","syringe","pill","drug","medical","stim"},
-    Valuables ={"gold","gem","diamond","jewel","valuable","cash","money","loot","treasure","artifact","crystal"},
-    Containers={"chest","crate","box","bag","backpack","stash","container","locker","safe","vault"},
+    -- 🔑 Keys & Access
+    Keys      ={
+        "keycard","key card","access card","id card","passcard","badge","fob",
+        "room key","master key","storage key","cabinet key","cell key",
+        "red keycard","blue keycard","green keycard","yellow keycard","black keycard",
+        "vip key","admin key","facility key","laboratory key",
+    },
+    -- 💀 Bodies & Remains
+    Bodies    ={
+        "body","corpse","dead","ragdoll","remains","victim","fallen",
+        "skeleton","bones","player body","dead body","loot body",
+    },
+    -- 🔫 Firearms
+    Weapons   ={
+        "gun","pistol","revolver","rifle","carbine","assault","battle rifle",
+        "shotgun","pump","semi","auto","smg","submachine","mp5","uzi","mac",
+        "sniper","dmr","marksman","bolt","lmg","machine gun","minigun",
+        "knife","combat knife","tactical knife","bayonet","machete","cleaver",
+        "sword","axe","hatchet","hammer","bat","crowbar","wrench",
+        "weapon","firearm","blade","crossbow","bow",
+        "ak","m4","ar15","glock","deagle","desert eagle","p90","vector",
+    },
+    -- 🔹 Ammunition
+    Ammo      ={
+        "ammo","ammunition","bullet","bullets","magazine","mag","mags",
+        "round","rounds","shell","shells","clip","cartridge","casing",
+        "9mm","45acp","556","762","308","12 gauge","buckshot","slug",
+        "tracer","hollow point","ap round","armor piercing","explosive round",
+    },
+    -- 💊 Medical & Consumables
+    Medical   ={
+        "medkit","med kit","first aid","bandage","gauze","tourniquet",
+        "health","heal","syringe","injector","epi","adrenaline",
+        "pill","pills","painkiller","ibuprofen","morphine","stim","stimulant",
+        "blood bag","saline","splint","cast","defibrillator",
+        "drug","medication","antidote","antivenom","vaccine",
+        "food","water","drink","ration","canteen","flask",
+    },
+    -- 💎 Valuables & Currency
+    Valuables ={
+        "gold","silver","platinum","gem","gemstone","diamond","ruby","emerald","sapphire",
+        "jewel","jewelry","necklace","ring","bracelet","watch",
+        "valuable","rare","artifact","relic","idol","statue",
+        "cash","money","wallet","currency","coin","token","credit","chip",
+        "loot","treasure","bounty","contraband","smuggled",
+        "intel","document","file","usb","drive","data",
+    },
+    -- 📦 Containers & Storage
+    Containers={
+        "chest","crate","supply crate","ammo crate","loot crate","drop crate",
+        "box","cardboard box","wooden box","metal box","case","briefcase","suitcase",
+        "bag","duffel","duffel bag","duffle","satchel","pouch",
+        "backpack","rucksack","pack","vest pouch",
+        "stash","cache","hidden stash","dead drop",
+        "container","locker","footlocker","gun locker","storage locker",
+        "safe","vault","strongbox","lock box","lockbox",
+        "drawer","cabinet","shelf","rack","bin","barrel","drum",
+    },
+    -- 🛡 Armor & Protection
+    Armor     ={
+        "helmet","ballistic helmet","tactical helmet","facemask","visor",
+        "vest","plate carrier","body armor","armor","armour","plates","armor plate",
+        "chest rig","rig","harness","shoulder pad","knee pad","shin guard",
+        "shield","riot shield","ballistic shield",
+        "gas mask","respirator","nbc suit","hazmat",
+    },
+    -- 💣 Explosives & Grenades
+    Explosives={
+        "grenade","frag","flashbang","smoke","incendiary","molotov","thermite",
+        "explosive","bomb","ied","mine","claymore","landmine","trip mine",
+        "c4","det cord","detonator","blasting cap",
+        "rpg","rocket","missile","mortar round","40mm",
+    },
+    -- 🔧 Tools & Equipment
+    Tools     ={
+        "toolkit","tool kit","tools","repair kit","repair",
+        "screwdriver","pliers","wire cutter","bolt cutter",
+        "lockpick","pick","crowbar","prybar",
+        "rope","zip tie","cuffs","handcuffs",
+        "radio","walkie","comms","earpiece","headset",
+        "flashlight","torch","lantern","glow stick",
+        "compass","map","gps","tracker","beacon",
+        "battery","batteries","generator","fuel","gasoline","petrol",
+        "knife sharpener","cleaning kit","gun cleaner","lubricant",
+        "parachute","zipline","grapple","hook",
+    },
     Other     ={},
 }
-local LOOT_ICONS={Keys="🔑",Bodies="💀",Weapons="🔫",Ammo="🔹",Medical="💊",Valuables="💎",Containers="📦",Other="·"}
+local LOOT_ICONS={
+    Keys="🔑",Bodies="💀",Weapons="🔫",Ammo="🔹",Medical="💊",
+    Valuables="💎",Containers="📦",Armor="🛡",Explosives="💣",Tools="🔧",Other="·"
+}
 
 local ClassifyCache={}
 local function ClassifyItem(name)
@@ -1264,7 +1475,16 @@ local function _LootCheck(inst)
     if not inst:IsA("BasePart") and not inst:IsA("Model") then return end
     if IsPlayerChar(inst) then return end
     local n=inst.Name
-    if n==""or n=="Baseplate"or n=="Terrain"or n=="SpawnLocation" then return end
+    -- Blacklist: exact-match known non-loot names (catches player face/hitbox parts)
+    if n=="" or LOOT_BLACKLIST[n] then return end
+    -- Ancestor guard: skip anything that lives inside a player character
+    -- This is the main fix for face hitbox false positives
+    local anc=inst.Parent
+    while anc and anc~=Workspace do
+        if IsPlayerChar(anc) then return end
+        if anc==LocalPlayer.Character then return end
+        anc=anc.Parent
+    end
     local pos
     if inst:IsA("BasePart") then pos=inst.Position
     elseif inst:IsA("Model") then
@@ -1273,6 +1493,8 @@ local function _LootCheck(inst)
     end
     if not pos then return end
     local cat=ClassifyItem(n)
+    -- Skip "Other" entirely unless it matched something meaningful
+    if cat=="Other" and #n<4 then return end
     lootCandidates[inst]={inst=inst,cat=cat}
 end
 
@@ -1381,6 +1603,243 @@ local function UpdateLootESP(myRoot)
 end
 
 -- ══════════════════════════════════════════
+--  TRAP ESP  (landmines, claymores, tripwires)
+-- ══════════════════════════════════════════
+local TRAP_KWS = {
+    -- Landmines
+    mine       = "Mine",
+    landmine   = "Mine",
+    ["land mine"] = "Mine",
+    antipersonnel = "Mine",
+    ["ap mine"] = "Mine",
+    ["pressure mine"] = "Mine",
+    ["bouncing betty"] = "Mine",
+    pomz       = "Mine",
+    tm62       = "Mine",
+    vs50       = "Mine",
+    pom        = "Mine",
+    -- Claymores / directional
+    claymore   = "Claymore",
+    directional = "Claymore",
+    ["m18"]    = "Claymore",
+    ["m18a1"]  = "Claymore",
+    ["dir mine"] = "Claymore",
+    -- Tripwires / trip mines
+    tripwire   = "Tripwire",
+    ["trip wire"] = "Tripwire",
+    ["trip mine"] = "Tripwire",
+    tripmine   = "Tripwire",
+    ["wire trap"] = "Tripwire",
+    -- Generic
+    trap       = "Trap",
+    explosive  = "Trap",
+    ied        = "Trap",
+    booby      = "Trap",
+    ["booby trap"] = "Trap",
+    proximity  = "Trap",
+    sensor     = "Trap",
+    ["prox mine"] = "Trap",
+    fragmine   = "Trap",
+}
+
+local TRAP_ICONS = {Mine="💣", Claymore="⚠️", Tripwire="🔺", Trap="⚠️"}
+
+local TrapESPObjects  = {}   -- inst → drawing set
+local trapCandidates  = {}   -- inst → {inst, pos, trapType}
+local TrapNameCache   = {}   -- lowercase name → trapType or false
+
+local function ClassifyTrap(name)
+    local l = name:lower()
+    if TrapNameCache[l] ~= nil then return TrapNameCache[l] end
+    for kw, trapType in pairs(TRAP_KWS) do
+        if l:find(kw, 1, true) then
+            TrapNameCache[l] = trapType; return trapType
+        end
+    end
+    TrapNameCache[l] = false; return false
+end
+
+local function _TrapCheck(inst)
+    if not (inst:IsA("BasePart") or inst:IsA("Model")) then return end
+    if IsPlayerChar(inst) then return end
+    local n = inst.Name
+    if n == "" or LOOT_BLACKLIST[n] then return end
+    -- Ancestor guard: skip parts inside player characters
+    local anc = inst.Parent
+    while anc and anc ~= Workspace do
+        if IsPlayerChar(anc) then return end
+        if anc == LocalPlayer.Character then return end
+        anc = anc.Parent
+    end
+    local trapType = ClassifyTrap(n)
+    if not trapType then return end
+    local pos
+    if inst:IsA("BasePart") then pos = inst.Position
+    elseif inst:IsA("Model") then
+        local p = inst.PrimaryPart or inst:FindFirstChildOfClass("BasePart")
+        if p then pos = p.Position end
+    end
+    if pos then trapCandidates[inst] = {inst=inst, pos=pos, trapType=trapType} end
+end
+
+local function _TrapRemove(inst)
+    if trapCandidates[inst] then
+        trapCandidates[inst] = nil
+    end
+    if TrapESPObjects[inst] then
+        local o = TrapESPObjects[inst]
+        pcall(function() o.dot:Remove() end)
+        pcall(function() o.label:Remove() end)
+        pcall(function() o.dist:Remove() end)
+        pcall(function() o.ring:Remove() end)
+        pcall(function() o.pulse:Remove() end)
+        pcall(function() o.warn:Remove() end)
+        TrapESPObjects[inst] = nil
+    end
+end
+
+local function _TrapBootstrap()
+    for _, d in ipairs(Workspace:GetDescendants()) do _TrapCheck(d) end
+end
+
+local function GetOrMakeTrapESP(inst, trapType)
+    if TrapESPObjects[inst] then return TrapESPObjects[inst] end
+    local col = State.TrapColorGeneric
+    if trapType == "Mine"     then col = State.TrapColorMine
+    elseif trapType == "Claymore" then col = State.TrapColorClaymore
+    elseif trapType == "Tripwire" then col = State.TrapColorWire
+    end
+    local o = {
+        dot   = NewDraw("Circle", {Visible=false, Filled=true,  Color=col, Radius=5,  NumSides=12, Thickness=0}),
+        ring  = NewDraw("Circle", {Visible=false, Filled=false, Color=col, Radius=16, NumSides=32, Thickness=2}),
+        pulse = NewDraw("Circle", {Visible=false, Filled=false, Color=col, Radius=0,  NumSides=32, Thickness=1.5}),
+        warn  = NewDraw("Text",   {Visible=false, Center=true,  Outline=true, Color=Color3.fromRGB(255,50,50), OutlineColor=Color3.new(0,0,0), Size=14, Text="⚠"}),
+        label = NewDraw("Text",   {Visible=false, Center=true,  Outline=true, Color=col, OutlineColor=Color3.new(0,0,0), Size=12}),
+        dist  = NewDraw("Text",   {Visible=false, Center=true,  Outline=true, Color=Color3.fromRGB(200,200,200), OutlineColor=Color3.new(0,0,0), Size=10}),
+        dangerRing = NewDraw("Circle", {Visible=false, Filled=false, Color=col, Radius=0, NumSides=48, Thickness=1, Transparency=0.5}),
+        _pulseT=0, _lastDist=-1,
+    }
+    TrapESPObjects[inst] = o; return o
+end
+
+local function HideTrap(o)
+    o.dot.Visible=false; o.ring.Visible=false; o.pulse.Visible=false
+    o.warn.Visible=false; o.label.Visible=false; o.dist.Visible=false
+    o.dangerRing.Visible=false
+end
+
+local _trapWasEnabled = false
+local function UpdateTrapESP(dt, myRoot)
+    if not State.TrapESPEnabled then
+        if _trapWasEnabled then
+            for inst in pairs(TrapESPObjects) do _TrapRemove(inst) end
+            _trapWasEnabled = false
+        end
+        return
+    end
+    _trapWasEnabled = true
+
+    local myPos = myRoot and myRoot.Position
+
+    for inst, entry in pairs(trapCandidates) do
+        if not inst.Parent then _TrapRemove(inst); continue end
+
+        -- Refresh position live (traps can be placed dynamically)
+        local pos
+        if inst:IsA("BasePart") then pos = inst.Position
+        elseif inst:IsA("Model") then
+            local p = inst.PrimaryPart or inst:FindFirstChildOfClass("BasePart")
+            if p then pos = p.Position end
+        end
+        if not pos then HideTrap(GetOrMakeTrapESP(inst, entry.trapType)); continue end
+        entry.pos = pos
+
+        local trapType = entry.trapType
+        local col = State.TrapColorGeneric
+        if trapType == "Mine"     then col = State.TrapColorMine
+        elseif trapType == "Claymore" then col = State.TrapColorClaymore
+        elseif trapType == "Tripwire" then col = State.TrapColorWire
+        end
+
+        local dist = 0
+        if myPos then
+            local dx=myPos.X-pos.X; local dy=myPos.Y-pos.Y; local dz=myPos.Z-pos.Z
+            dist = mfloor((dx*dx+dy*dy+dz*dz)^0.5)
+        end
+        if dist > State.TrapMaxDist then
+            if TrapESPObjects[inst] then HideTrap(TrapESPObjects[inst]) end
+            continue
+        end
+
+        local sp, onScreen = W2S(pos)
+        local o = GetOrMakeTrapESP(inst, trapType)
+
+        -- Update colors live (user may change them in menu)
+        o.dot.Color=col; o.ring.Color=col; o.pulse.Color=col
+        o.label.Color=col; o.dangerRing.Color=col
+
+        if not onScreen then HideTrap(o); continue end
+
+        -- Pulsing ring
+        o._pulseT = (o._pulseT + dt * 2.2) % 1
+        local pulseAlpha = 1 - o._pulseT
+
+        o.dot.Position=sp; o.dot.Visible=true
+
+        o.ring.Position=sp; o.ring.Radius=14; o.ring.Visible=true
+
+        if State.TrapPulse then
+            o.pulse.Position=sp
+            o.pulse.Radius=14 + o._pulseT*22
+            o.pulse.Transparency=pulseAlpha*0.2
+            o.pulse.Visible=true
+        else o.pulse.Visible=false end
+
+        -- ⚠ warning icon above dot
+        o.warn.Position=Vector2.new(sp.X, sp.Y-28); o.warn.Visible=true
+
+        if State.TrapShowName then
+            local icon = TRAP_ICONS[trapType] or "⚠️"
+            o.label.Text = icon.." "..inst.Name
+            o.label.Position=Vector2.new(sp.X, sp.Y-16); o.label.Visible=true
+        else o.label.Visible=false end
+
+        if State.TrapShowDist then
+            if o._lastDist ~= dist then o._lastDist=dist; o.dist.Text=dist.." m" end
+            o.dist.Position=Vector2.new(sp.X, sp.Y+8); o.dist.Visible=true
+        else o.dist.Visible=false end
+
+        -- 3D danger radius circle projected at ground level
+        if State.TrapDangerRadius and myPos then
+            -- Project danger circle onto screen: sample 8 points around the trap
+            local r = State.TrapDangerRadiusSize
+            local minX,maxX,minY,maxY = mhuge,-mhuge,mhuge,-mhuge
+            local allOn = true
+            for i=0,7 do
+                local ang = i/8 * pi*2
+                local p3 = Vector3.new(pos.X+mcos(ang)*r, pos.Y, pos.Z+msin(ang)*r)
+                local s2, on = W2S(p3)
+                if not on then allOn=false; break end
+                if s2.X<minX then minX=s2.X end; if s2.X>maxX then maxX=s2.X end
+                if s2.Y<minY then minY=s2.Y end; if s2.Y>maxY then maxY=s2.Y end
+            end
+            if allOn then
+                -- Draw as a circle centred on the projected midpoint
+                local rScrn = mmax((maxX-minX)*0.5, 6)
+                o.dangerRing.Position=sp
+                o.dangerRing.Radius=rScrn
+                o.dangerRing.Visible=true
+            else o.dangerRing.Visible=false end
+        else o.dangerRing.Visible=false end
+    end
+
+    -- Cleanup stale objects
+    for inst in pairs(TrapESPObjects) do
+        if not trapCandidates[inst] then _TrapRemove(inst) end
+    end
+end
+
+-- ══════════════════════════════════════════
 --  EXFIL ESP  (deferred scan every 150 frames)
 -- ══════════════════════════════════════════
 local EXFIL_KWS={"exfil","extract","extraction","exit","evac","evacuate",
@@ -1441,6 +1900,8 @@ Workspace.DescendantAdded:Connect(function(d)
         if d:IsA("Model") then _AIAdd(d) end
         -- Loot candidates: BaseParts and Models by name
         _LootCheck(d)
+        -- Trap candidates: mines, claymores, tripwires
+        _TrapCheck(d)
         -- Exfil candidates: named zones
         _ExfilCheck(d)
     end)
@@ -1449,6 +1910,7 @@ Workspace.DescendantRemoving:Connect(function(d)
     -- Synchronous removal — keep candidate maps clean immediately
     if d:IsA("Model") then aiCandidates[d]=nil end
     _LootRemove(d)
+    _TrapRemove(d)
     _ExfilRemove(d)
 end)
 
@@ -2165,8 +2627,10 @@ RunService.RenderStepped:Connect(function(dt)
     FOVCircle.Color=State.FOVColor
     FOVCircle.Visible=State.AimbotEnabled and State.FOVVisible
 
-    -- Aimbot
+    -- Aimbot (players)
     RunAimbot(camCF)
+    -- Aimbot (AI/NPCs)
+    RunAIAimbot(camCF)
 
     -- TriggerBot handled in Heartbeat (see below) — removed from RenderStepped to avoid illegal yield
 
@@ -2176,6 +2640,7 @@ RunService.RenderStepped:Connect(function(dt)
     UpdateAIESP(myRoot)
     UpdateLootESP(myRoot)
     UpdateExfilESP(dt,myRoot)
+    UpdateTrapESP(dt,myRoot)
     UpdateZoom()
     UpdateCrosshair(dt)
     UpdateHitmarker(dt)
@@ -2232,6 +2697,33 @@ T2:CreateColorPicker({Name="Box Color",Color=Color3.fromRGB(255,160,30),Flag="AI
 T2:CreateSection("Range")
 T2:CreateSlider({Name="Max Distance",Range={50,1500},Increment=25,Suffix=" studs",CurrentValue=400,Flag="AI_MD",Callback=function(v)State.AIESPMaxDist=v end})
 T2:CreateLabel("Signal-driven live tracking — zero periodic scans, zero frame-time spikes.")
+T2:CreateSection("AI Aimbot")
+T2:CreateToggle({Name="Enable AI Aimbot",CurrentValue=false,Flag="AA_ON",
+    Callback=function(v)
+        State.AIAimbotEnabled=v
+        AIFOVCircle.Visible=v and State.AIFOVVisible
+        if not v then AILockDot.Visible=false; aiLockedTarget=nil end
+    end})
+T2:CreateDropdown({Name="Aim Mode",Options={"Smooth","Blatant","Instant"},CurrentOption={"Smooth"},Flag="AA_MODE",
+    Callback=function(v)State.AIAimbotMode=v[1] or "Smooth" end})
+T2:CreateDropdown({Name="Aim Key",Options={"MouseButton2","C","Q","E","F"},CurrentOption={"MouseButton2"},Flag="AA_KEY",
+    Callback=function(v)State.AIAimbotKey=v[1] or "MouseButton2" end})
+T2:CreateDropdown({Name="Target Part",Options={"Head","HumanoidRootPart","UpperTorso","Torso"},
+    CurrentOption={"Head"},Flag="AA_PART",Callback=function(v)State.AIAimbotPart=v[1] or "Head"; aiLockedTarget=nil end})
+T2:CreateToggle({Name="Lock-On Target",CurrentValue=false,Flag="AA_LOCK",Callback=function(v)State.AIAimbotLock=v; aiLockedTarget=nil end})
+T2:CreateSection("AI Smooth")
+T2:CreateSlider({Name="Smooth Speed",Range={1,25},Increment=1,CurrentValue=5,Flag="AA_SS",
+    Callback=function(v)State.AIAimbotSmooth=0.025+v*0.014 end})
+T2:CreateSection("AI Blatant")
+T2:CreateSlider({Name="Snap Speed",Range={30,99},Increment=1,Suffix="%",CurrentValue=55,Flag="AA_BS",
+    Callback=function(v)State.AIAimbotBlatant=v/100 end})
+T2:CreateSection("AI FOV Circle")
+T2:CreateSlider({Name="FOV Radius",Range={20,700},Increment=5,Suffix=" px",CurrentValue=150,Flag="AA_FOVR",
+    Callback=function(v)State.AIAimbotFOV=v end})
+T2:CreateToggle({Name="Show FOV Circle",CurrentValue=true,Flag="AA_FOVV",
+    Callback=function(v)State.AIFOVVisible=v; AIFOVCircle.Visible=State.AIAimbotEnabled and v end})
+T2:CreateColorPicker({Name="FOV Color",Color=Color3.fromRGB(255,160,30),Flag="AA_FOVC",
+    Callback=function(v)State.AIFOVColor=v; AIFOVCircle.Color=v end})
 
 -- ── 💎  LOOT ESP ──────────────────────────
 local T3=Window:CreateTab("💎  Loot ESP",4483362458)
@@ -2248,10 +2740,17 @@ T3:CreateToggle({Name="🔹 Ammo",                CurrentValue=true, Flag="LF_A"
 T3:CreateToggle({Name="💊 Medical",             CurrentValue=true, Flag="LF_M",Callback=function(v)State.LootFilter.Medical=v end})
 T3:CreateToggle({Name="💎 Valuables",           CurrentValue=true, Flag="LF_V",Callback=function(v)State.LootFilter.Valuables=v end})
 T3:CreateToggle({Name="📦 Containers",          CurrentValue=true, Flag="LF_C",Callback=function(v)State.LootFilter.Containers=v end})
+T3:CreateToggle({Name="🛡 Armor & Helmets",      CurrentValue=true, Flag="LF_AR",Callback=function(v)State.LootFilter.Armor=v end})
+T3:CreateToggle({Name="💣 Explosives & Grenades",CurrentValue=true, Flag="LF_EX",Callback=function(v)State.LootFilter.Explosives=v end})
+T3:CreateToggle({Name="🔧 Tools & Equipment",    CurrentValue=true, Flag="LF_TL",Callback=function(v)State.LootFilter.Tools=v end})
 T3:CreateToggle({Name="·  Other",               CurrentValue=false,Flag="LF_O",Callback=function(v)State.LootFilter.Other=v end})
 T3:CreateSection("Category Colors")
-for cat,col in pairs(State.LootColors) do
-    T3:CreateColorPicker({Name=cat,Color=col,Flag="LC_"..cat,Callback=function(v)State.LootColors[cat]=v end})
+local _lootCatOrder={"Keys","Bodies","Weapons","Ammo","Medical","Valuables","Containers","Armor","Explosives","Tools","Other"}
+for _,cat in ipairs(_lootCatOrder) do
+    local col=State.LootColors[cat]
+    if col then
+        T3:CreateColorPicker({Name=cat,Color=col,Flag="LC_"..cat,Callback=function(v)State.LootColors[cat]=v end})
+    end
 end
 
 -- ── 🚁  EXFIL ESP ─────────────────────────
@@ -2273,6 +2772,31 @@ T4:CreateToggle({Name="🌈 Rainbow",CurrentValue=false,Flag="X_RBW",Callback=fu
 T4:CreateColorPicker({Name="Exfil Color",Color=Color3.fromRGB(80,255,140),Flag="X_COL",Callback=function(v)State.ExfilColor=v end})
 T4:CreateSection("Range")
 T4:CreateSlider({Name="Max Distance",Range={100,5000},Increment=100,Suffix=" studs",CurrentValue=2000,Flag="X_MD",Callback=function(v)State.ExfilMaxDist=v end})
+
+-- ── 💣  TRAP ESP ─────────────────────────
+local T4B=Window:CreateTab("💣  Trap ESP",4483362458)
+T4B:CreateSection("Trap Detection")
+T4B:CreateToggle({Name="Enable Trap ESP",CurrentValue=false,Flag="TR_ON",
+    Callback=function(v)
+        State.TrapESPEnabled=v
+        if not v then for inst in pairs(TrapESPObjects) do _TrapRemove(inst) end end
+    end})
+T4B:CreateToggle({Name="Pulse Ring",      CurrentValue=true, Flag="TR_PLS",Callback=function(v)State.TrapPulse=v end})
+T4B:CreateToggle({Name="Show Name",       CurrentValue=true, Flag="TR_NM", Callback=function(v)State.TrapShowName=v end})
+T4B:CreateToggle({Name="Show Distance",   CurrentValue=true, Flag="TR_DT", Callback=function(v)State.TrapShowDist=v end})
+T4B:CreateToggle({Name="Danger Radius",   CurrentValue=true, Flag="TR_DR",
+    Callback=function(v)State.TrapDangerRadius=v end})
+T4B:CreateSlider({Name="Radius Size",Range={2,20},Increment=1,Suffix=" studs",CurrentValue=8,Flag="TR_DRS",
+    Callback=function(v)State.TrapDangerRadiusSize=v end})
+T4B:CreateSection("Range")
+T4B:CreateSlider({Name="Max Distance",Range={25,500},Increment=25,Suffix=" studs",CurrentValue=150,Flag="TR_MD",
+    Callback=function(v)State.TrapMaxDist=v end})
+T4B:CreateSection("Colours")
+T4B:CreateColorPicker({Name="Landmine Color",  Color=Color3.fromRGB(255,50,50),  Flag="TR_CM", Callback=function(v)State.TrapColorMine=v end})
+T4B:CreateColorPicker({Name="Claymore Color",  Color=Color3.fromRGB(255,120,0),  Flag="TR_CC", Callback=function(v)State.TrapColorClaymore=v end})
+T4B:CreateColorPicker({Name="Tripwire Color",  Color=Color3.fromRGB(255,220,0),  Flag="TR_CW", Callback=function(v)State.TrapColorWire=v end})
+T4B:CreateColorPicker({Name="Generic Color",   Color=Color3.fromRGB(255,80,80),  Flag="TR_CG", Callback=function(v)State.TrapColorGeneric=v end})
+T4B:CreateLabel("Detects: Landmines · Claymores · Tripwires · IEDs · Proximity sensors")
 
 -- ── 🎯  AIMBOT ────────────────────────────
 local T5=Window:CreateTab("🎯  Aimbot",4483362458)
@@ -2482,6 +3006,7 @@ T10:CreateLabel("Personal script by Trav  🔒  Stay lowkey 🤫")
 task.defer(function()
     _AIBootstrap()
     _LootBootstrap()
+    _TrapBootstrap()
     _ExfilBootstrap()
 end)
 Rayfield:LoadConfiguration()
