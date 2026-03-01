@@ -265,7 +265,7 @@ do
     _gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     pcall(function() _gui.Parent = LocalPlayer:WaitForChild("PlayerGui") end)
 
-    -- Invisible frame sized to panel — draggable
+    -- Invisible frame sized to panel
     local _frame = Instance.new("Frame")
     _frame.Size = UDim2.new(0, _pW, 0, _pH)
     _frame.Position = UDim2.new(0, _pX, 0, _pY)
@@ -273,12 +273,13 @@ do
     _frame.BorderSizePixel = 0
     _frame.Parent = _gui
 
-    -- Drag handle covers top of panel (title area)
+    -- Drag handle covers ONLY the top title area so the textbox stays clickable
     local _drag = Instance.new("Frame")
-    _drag.Size = UDim2.new(1, 0, 0, 70)
+    _drag.Size = UDim2.new(1, 0, 0, 115)  -- covers title + subtitle, stops above textbox
     _drag.Position = UDim2.new(0, 0, 0, 0)
     _drag.BackgroundTransparency = 1
     _drag.BorderSizePixel = 0
+    _drag.ZIndex = 2
     _drag.Parent = _frame
 
     -- Drag logic
@@ -301,38 +302,36 @@ do
             local newX = _startPos.X.Offset + delta.X
             local newY = _startPos.Y.Offset + delta.Y
             _frame.Position = UDim2.new(0, newX, 0, newY)
-            -- Sync drawing objects to new position
             local dx = newX - _pX
             local dy = newY - _pY
-            _panel.Position  = Vector2.new(_pX+dx, _pY+dy)
-            _bord.Position   = Vector2.new(_pX+dx, _pY+dy)
-            _ibord.Position  = Vector2.new(_pX+4+dx, _pY+4+dy)
-            _bg.Visible = true  -- keep bg in place (fullscreen)
-            _ttl.Position    = Vector2.new(_scx+dx, _pY+12+dy)
-            _sub.Position    = Vector2.new(_scx+dx, _pY+56+dy)
-            _sep.From        = Vector2.new(_pX+24+dx, _pY+74+dy)
-            _sep.To          = Vector2.new(_pX+_pW-24+dx, _pY+74+dy)
-            _step.Position   = Vector2.new(_scx+dx, _pY+82+dy)
-            _prmpt.Position  = Vector2.new(_scx+dx, _pY+100+dy)
-            _hint.Position   = Vector2.new(_scx+dx, _pY+_pH-22+dy)
+            _panel.Position = Vector2.new(_pX+dx,    _pY+dy)
+            _bord.Position  = Vector2.new(_pX+dx,    _pY+dy)
+            _ibord.Position = Vector2.new(_pX+4+dx,  _pY+4+dy)
+            _ttl.Position   = Vector2.new(_scx+dx,   _pY+12+dy)
+            _sub.Position   = Vector2.new(_scx+dx,   _pY+56+dy)
+            _sep.From       = Vector2.new(_pX+24+dx, _pY+74+dy)
+            _sep.To         = Vector2.new(_pX+_pW-24+dx, _pY+74+dy)
+            _step.Position  = Vector2.new(_scx+dx,   _pY+82+dy)
+            _prmpt.Position = Vector2.new(_scx+dx,   _pY+100+dy)
+            _hint.Position  = Vector2.new(_scx+dx,   _pY+_pH-22+dy)
+            local crysBase = {
+                {Vector2.new(_pX,_pY),         Vector2.new(_pX+22,_pY)},
+                {Vector2.new(_pX,_pY),         Vector2.new(_pX,_pY+22)},
+                {Vector2.new(_pX+_pW,_pY),     Vector2.new(_pX+_pW-22,_pY)},
+                {Vector2.new(_pX+_pW,_pY),     Vector2.new(_pX+_pW,_pY+22)},
+                {Vector2.new(_pX,_pY+_pH),     Vector2.new(_pX+22,_pY+_pH)},
+                {Vector2.new(_pX,_pY+_pH),     Vector2.new(_pX,_pY+_pH-22)},
+                {Vector2.new(_pX+_pW,_pY+_pH), Vector2.new(_pX+_pW-22,_pY+_pH)},
+                {Vector2.new(_pX+_pW,_pY+_pH), Vector2.new(_pX+_pW,_pY+_pH-22)},
+            }
             for i,c in ipairs(_crys) do
-                local offsets = {
-                    {Vector2.new(_pX,_pY),     Vector2.new(_pX+22,_pY)},
-                    {Vector2.new(_pX,_pY),     Vector2.new(_pX,_pY+22)},
-                    {Vector2.new(_pX+_pW,_pY), Vector2.new(_pX+_pW-22,_pY)},
-                    {Vector2.new(_pX+_pW,_pY), Vector2.new(_pX+_pW,_pY+22)},
-                    {Vector2.new(_pX,_pY+_pH), Vector2.new(_pX+22,_pY+_pH)},
-                    {Vector2.new(_pX,_pY+_pH), Vector2.new(_pX,_pY+_pH-22)},
-                    {Vector2.new(_pX+_pW,_pY+_pH), Vector2.new(_pX+_pW-22,_pY+_pH)},
-                    {Vector2.new(_pX+_pW,_pY+_pH), Vector2.new(_pX+_pW,_pY+_pH-22)},
-                }
-                c.From = offsets[i][1] + Vector2.new(dx,dy)
-                c.To   = offsets[i][2] + Vector2.new(dx,dy)
+                c.From = crysBase[i][1] + Vector2.new(dx,dy)
+                c.To   = crysBase[i][2] + Vector2.new(dx,dy)
             end
         end
     end)
 
-    -- TextBox positioned over the input area
+    -- TextBox — ZIndex 3 so it's always above the drag frame and always clickable
     local _tb = Instance.new("TextBox")
     _tb.Size = UDim2.new(0, 410, 0, 34)
     _tb.Position = UDim2.new(0.5, -205, 0, 118)
@@ -345,6 +344,7 @@ do
     _tb.TextSize = 14
     _tb.ClearTextOnFocus = false
     _tb.TextTruncate = Enum.TextTruncate.AtEnd
+    _tb.ZIndex = 3
     _tb.Visible = false
     _tb.Parent = _frame
 
