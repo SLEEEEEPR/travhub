@@ -450,6 +450,9 @@ do
                 _setHint(("✗  %s  (%d attempt%s)"):format(msg, _attempts, _attempts ~= 1 and "s" or ""), Color3.fromRGB(255, 80, 80))
                 _tbStroke.Color = Color3.fromRGB(255, 80, 80)
                 _tb.Text = ""
+                -- Show input UI in case this was triggered by a saved/expired key
+                _prmpt.Visible = true
+                _tb.Visible = true
                 _tb.TextEditable = true
                 _busy = false
                 task.wait(0.15)
