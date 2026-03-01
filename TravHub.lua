@@ -372,6 +372,13 @@ do
             _validate()
         elseif kc == Enum.KeyCode.Backspace then
             if #_buf > 0 then _buf = _buf:sub(1,-2); _refreshDisplay() end
+        elseif kc == Enum.KeyCode.V and UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then
+            -- Ctrl+V paste from clipboard
+            local pasted = ""
+            pcall(function() pasted = getclipboard() or "" end)
+            pcall(function() if pasted == "" then pasted = Clipboard and Clipboard.get() or "" end end)
+            pasted = pasted:gsub("%s+",""):upper():sub(1,64)
+            if #pasted > 0 then _buf = pasted; _refreshDisplay() end
         else
             local ch = _KMAP[kc]
             if ch and #_buf < 64 then _buf = _buf..ch; _refreshDisplay() end
