@@ -155,11 +155,12 @@ local _kaSession = nil  -- set after successful init
 local function _kaInit()
     -- Step 1: initialise session, get sessionid back
     local guid = HttpService:GenerateGUID(false):sub(1,32)  -- ≤36 chars per KA spec
-    local body = ("type=init&ver=%s&hash=&enckey=%s&name=%s&ownerid=%s"):format(
+    local body = ("type=init&ver=%s&hash=&enckey=%s&name=%s&ownerid=%s&secret=%s"):format(
         KA_VER,
         HttpService:UrlEncode(guid),
         HttpService:UrlEncode(KA_NAME),
-        HttpService:UrlEncode(KA_OWNERID)
+        HttpService:UrlEncode(KA_OWNERID),
+        HttpService:UrlEncode(KA_SECRET)
     )
     local res, err = _kaRequest({
         Url     = KA_URL,
