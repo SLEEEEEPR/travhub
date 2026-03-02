@@ -466,14 +466,6 @@ local S = {
     CrosshairSize=18, CrosshairGap=5, CrosshairThick=2,
     CrosshairRainbow=false, CrosshairSpin=false, CrosshairSpinSpeed=90,
     CrosshairOpacity=0,
-    -- Rivals Aimbot
-    RivalsEnabled=false, RivalsMode="Smooth", RivalsKey="MouseButton2",
-    RivalsSmooth=0.12, RivalsBlatant=0.60, RivalsPart="Head",
-    RivalsLock=false, RivalsTeamCheck=false,
-    RivalsFOV=180, RivalsFOVVisible=true,
-    RivalsFOVColor=Color3.fromRGB(255,60,60),
-    RivalsPredict=false, RivalsPredictStr=0.5,
-    RivalsLockDot=true,
 }
 
 -- ══════════════════════════════════════════
@@ -566,12 +558,6 @@ local FOVCircle    = NewDraw("Circle",{Visible=false,Thickness=1.5,Color=S.FOVCo
 local LockDot      = NewDraw("Circle",{Visible=false,Filled=true,Color=Color3.fromRGB(255,60,60),Radius=4,NumSides=16,Thickness=0})
 local AIFOVCircle  = NewDraw("Circle",{Visible=false,Thickness=1.5,Color=Color3.fromRGB(255,160,30),Filled=false,NumSides=64})
 local AILockDot    = NewDraw("Circle",{Visible=false,Filled=true,Color=Color3.fromRGB(255,160,30),Radius=4,NumSides=16,Thickness=0})
-
--- ══════════════════════════════════════════
---  RIVALS AIMBOT DRAWINGS
--- ══════════════════════════════════════════
-local RivalsFOVCircle = NewDraw("Circle",{Visible=false,Thickness=1.5,Color=Color3.fromRGB(255,60,60),Filled=false,NumSides=64})
-local RivalsLockDot   = NewDraw("Circle",{Visible=false,Filled=true,Color=Color3.fromRGB(255,60,60),Radius=5,NumSides=16,Thickness=0})
 
 -- ══════════════════════════════════════════
 --  CROSSHAIR DRAWINGS
@@ -2538,163 +2524,6 @@ Players.PlayerRemoving:Connect(function(p)
 end)
 
 -- ══════════════════════════════════════════
---  RIVALS AIMBOT
---  Dedicated aimbot tuned for Rivals.
---  Uses a separate FOV circle, lock dot, and state so it never
---  interferes with the general aimbot on other games.
--- ══════════════════════════════════════════
-local rivalsLockedTarget = nil
-local rivalsLastPos      = {}
-local rivalsPrevTarget   = nil
-
-local RIVALS_PARTS = {"Head","UpperTorso","HumanoidRootPart","Torso"}
-
-local function RivalsFindPart(char)
-    if not char then return nil end
-    local pref = char:FindFirstChild(S.RivalsPart)
-    if pref and pref:IsA("BasePart") then return pref end
-    for _,name in ipairs(RIVALS_PARTS) do
-        local p = char:FindFirstChild(name)
-        if p and p:IsA("BasePart") then return p end
-    end
-    return char:FindFirstChildWhichIsA("BasePart")
-end
-
-local function RivalsAlive(player)
-    local char = player.Character
-    if not char then return false end
-    -- Rivals uses a standard Humanoid with Health attribute
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        if hum.Health <= 0 then return false end
-    end
-    -- Rivals also gates on a "Alive" bool or Health attribute
-    local ok, hp = pcall(function()
-        return char:GetAttribute("Health") or char:GetAttribute("HP")
-    end)
-    if ok and type(hp) == "number" and hp <= 0 then return false end
-    return true
-end
-
-local function GetRivalsTarget()
-    local cx = VP_CX; local cy = VP_CY
-    local acqFOV  = S.RivalsFOV
-    local keepFOV = acqFOV * 3.0
-
-    -- Maintain existing lock
-    if S.RivalsLock and rivalsLockedTarget then
-        local p    = rivalsLockedTarget
-        local char = p and p.Character
-        local valid = false
-        if char and not (S.RivalsTeamCheck and p.Team == LocalPlayer.Team) then
-            if RivalsAlive(p) then
-                local part = RivalsFindPart(char)
-                if part then
-                    local sp, on = W2S(part.Position)
-                    if on then
-                        local dx = sp.X - cx; local dy = sp.Y - cy
-                        if (dx*dx + dy*dy)^0.5 < keepFOV then valid = true end
-                    end
-                end
-            end
-        end
-        if valid then return rivalsLockedTarget end
-        rivalsLastPos[rivalsLockedTarget] = nil
-        rivalsLockedTarget = nil
-    end
-
-    -- Find closest target inside FOV
-    local best, bd = nil, mhuge
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p == LocalPlayer then continue end
-        if S.RivalsTeamCheck and p.Team == LocalPlayer.Team then continue end
-        local char = p.Character
-        if not char then continue end
-        if not RivalsAlive(p) then continue end
-        local part = RivalsFindPart(char)
-        if not part then continue end
-        local sp, on = W2S(part.Position)
-        if not on then continue end
-        local dx = sp.X - cx; local dy = sp.Y - cy
-        local d  = (dx*dx + dy*dy)^0.5
-        if d < acqFOV and d < bd then bd = d; best = p end
-    end
-
-    if best then
-        if best ~= rivalsPrevTarget then
-            rivalsLastPos[best] = nil
-            rivalsPrevTarget    = best
-        end
-        if S.RivalsLock then rivalsLockedTarget = best end
-    end
-    return best
-end
-
-local function RunRivalsAimbot(camCF, dt)
-    -- Update FOV circle
-    RivalsFOVCircle.Position  = Vector2.new(VP_CX, VP_CY)
-    RivalsFOVCircle.Radius    = S.RivalsFOV
-    RivalsFOVCircle.Color     = S.RivalsFOVColor
-    RivalsFOVCircle.Visible   = S.RivalsEnabled and S.RivalsFOVVisible
-
-    if not S.RivalsEnabled then
-        RivalsLockDot.Visible = false
-        return
-    end
-
-    local target = GetRivalsTarget()
-
-    -- Draw lock dot on target
-    if target and S.RivalsLockDot then
-        local part = RivalsFindPart(target.Character)
-        if part then
-            local sp, on = W2S(part.Position)
-            RivalsLockDot.Position = sp
-            RivalsLockDot.Visible  = on
-        end
-    else
-        RivalsLockDot.Visible = false
-    end
-
-    -- Only aim when key held and target exists
-    if not IsAimKeyDown(S.RivalsKey) or not target then return end
-
-    local part = RivalsFindPart(target.Character)
-    if not part then return end
-
-    local pos = part.Position
-
-    -- Optional prediction
-    if S.RivalsPredict then
-        local prev = rivalsLastPos[target]
-        rivalsLastPos[target] = pos
-        if prev then
-            pos = pos + (pos - prev) * (S.RivalsPredictStr * 5)
-        end
-    else
-        rivalsLastPos[target] = pos
-    end
-
-    local targetCF = CFrame.new(camCF.Position, pos)
-    local safeDt   = mclamp(dt, 0.001, 0.05)
-
-    if S.RivalsMode == "Instant" then
-        pcall(function() Camera.CFrame = targetCF end)
-
-    elseif S.RivalsMode == "Blatant" then
-        local alpha = mclamp(1 - (1 - S.RivalsBlatant)^(safeDt * 60), 0.01, 0.99)
-        pcall(function() Camera.CFrame = camCF:Lerp(targetCF, alpha) end)
-
-    else -- Smooth
-        local sp2d = W2S(pos)
-        local dx2  = sp2d.X - VP_CX; local dy2 = sp2d.Y - VP_CY
-        local distBoost = mclamp((dx2*dx2 + dy2*dy2)^0.5 / mmax(S.RivalsFOV, 1), 0, 1) * S.RivalsSmooth * 0.8
-        local alpha = mclamp(1 - (1 - (S.RivalsSmooth + distBoost))^(safeDt * 60), 0.005, 0.95)
-        pcall(function() Camera.CFrame = camCF:Lerp(targetCF, alpha) end)
-    end
-end
-
--- ══════════════════════════════════════════
 --  RENDER LOOP
 -- ══════════════════════════════════════════
 RunService.RenderStepped:Connect(function(dt)
@@ -2711,7 +2540,7 @@ RunService.RenderStepped:Connect(function(dt)
     local myChar=LocalPlayer.Character
     local myRoot=myChar and myChar:FindFirstChild("HumanoidRootPart")
     lastCamCF=camCF
-    RunAimbot(camCF,dt); RunAIAimbot(camCF,dt); RunRivalsAimbot(camCF,dt)
+    RunAimbot(camCF,dt); RunAIAimbot(camCF,dt)
     local rcol=S.ESPRainbow and RainbowHSV(0.4) or nil
     UpdatePlayerESP(myRoot,rcol)
     UpdateAIESP(myRoot)
@@ -2939,50 +2768,6 @@ end})
 T9:CreateSection("About")
 T9:CreateLabel("TravHub v3.9  ·  Crystal Edition  ·  Clean Build")
 T9:CreateLabel("Fixed crosshair  ·  No Trap/Survive tabs  ·  Xeno-compatible")
-
--- ── TAB 10: Rivals ────────────────────────────────────
-local T10=Window:CreateTab("⚔️  Rivals",4483362458)
-T10:CreateSection("Rivals Aimbot")
-T10:CreateToggle({Name="Enable Rivals Aimbot",CurrentValue=false,Flag="RV_ON",Callback=function(v)
-    S.RivalsEnabled=v
-    if not v then RivalsLockDot.Visible=false; rivalsLockedTarget=nil end
-end})
-T10:CreateDropdown({Name="Aim Mode",Options={"Smooth","Blatant","Instant"},CurrentOption={"Smooth"},Flag="RV_MODE",Callback=function(v)
-    S.RivalsMode=v[1] or "Smooth"
-end})
-T10:CreateDropdown({Name="Aim Key",Options={"MouseButton2","C","Q","E","F"},CurrentOption={"MouseButton2"},Flag="RV_KEY",Callback=function(v)
-    S.RivalsKey=v[1] or "MouseButton2"
-end})
-T10:CreateDropdown({Name="Target Part",Options={"Head","UpperTorso","HumanoidRootPart","Torso"},CurrentOption={"Head"},Flag="RV_PART",Callback=function(v)
-    S.RivalsPart=v[1] or "Head"; rivalsLockedTarget=nil
-end})
-T10:CreateSection("Behaviour")
-T10:CreateToggle({Name="Lock-On",     CurrentValue=false,Flag="RV_LOCK",Callback=function(v)S.RivalsLock=v; rivalsLockedTarget=nil end})
-T10:CreateToggle({Name="Team Check",  CurrentValue=false,Flag="RV_TM",  Callback=function(v)S.RivalsTeamCheck=v end})
-T10:CreateToggle({Name="Show Lock Dot",CurrentValue=true, Flag="RV_DOT", Callback=function(v)S.RivalsLockDot=v; if not v then RivalsLockDot.Visible=false end end})
-T10:CreateSection("Smooth Settings")
-T10:CreateSlider({Name="Smooth Speed",Range={1,25},Increment=1,CurrentValue=6,Flag="RV_SS",Callback=function(v)
-    S.RivalsSmooth=0.025+v*0.014
-end})
-T10:CreateSection("Blatant Settings")
-T10:CreateSlider({Name="Snap Speed",Range={30,99},Increment=1,Suffix="%",CurrentValue=60,Flag="RV_BS",Callback=function(v)
-    S.RivalsBlatant=v/100
-end})
-T10:CreateSection("Prediction")
-T10:CreateToggle({Name="Target Prediction",CurrentValue=false,Flag="RV_PRD",Callback=function(v)S.RivalsPredict=v end})
-T10:CreateSlider({Name="Strength",Range={1,10},Increment=1,CurrentValue=5,Flag="RV_PRS",Callback=function(v)
-    S.RivalsPredictStr=v/10
-end})
-T10:CreateSection("FOV")
-T10:CreateSlider({Name="FOV Radius",Range={20,700},Increment=5,Suffix=" px",CurrentValue=180,Flag="RV_FOV",Callback=function(v)
-    S.RivalsFOV=v
-end})
-T10:CreateToggle({Name="Show FOV Circle",CurrentValue=true,Flag="RV_FOVV",Callback=function(v)
-    S.RivalsFOVVisible=v; if not v then RivalsFOVCircle.Visible=false end
-end})
-T10:CreateColorPicker({Name="FOV Color",Color=Color3.fromRGB(255,60,60),Flag="RV_FOVC",Callback=function(v)
-    S.RivalsFOVColor=v; RivalsFOVCircle.Color=v
-end})
 
 -- ══════════════════════════════════════════
 --  BOOTSTRAP
