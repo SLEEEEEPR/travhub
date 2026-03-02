@@ -78,7 +78,7 @@ local AME = {
 --  KEYAUTH CONFIG
 -- ══════════════════════════════════════════
 local KA_NAME    = "Mermorz's Application"
-local KA_OWNERID = "hLIkGaxr8u"
+local KA_OWNERID = "hIIkGaxr8u"
 local KA_SECRET  = "7f2253965f73618809126cba1ff66693c04f82888535c82709f9c17c9ceafdc1"
 local KA_VER     = "1.0"
 local KA_URL     = "https://keyauth.win/api/1.2/"
