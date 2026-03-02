@@ -74,8 +74,246 @@ local AME = {
     glow   = Color3.fromRGB(200,130,255),
 }
 
+-- ══════════════════════════════════════════
+--  KEYAUTH CONFIG
+-- ══════════════════════════════════════════
+local KA_NAME    = "Mermorz's Application"
+local KA_OWNERID = "hIIkGaxr8u"
+local KA_SECRET  = "7f2253965f73618809126cba1ff66693c04f82888535c82709f9c17c9ceafdc1"
+local KA_VER     = "1.0"
+local KA_URL     = "https://keyauth.win/api/1.2/"
 
--- Key system removed — loads directly
+-- ══════════════════════════════════════════
+--  HTTP WRAPPER  (Xeno: global request())
+-- ══════════════════════════════════════════
+local function _kaRequest(opts)
+    local fn = nil
+    if type(request)=="function"                              then fn=request
+    elseif syn and type(syn.request)=="function"              then fn=syn.request
+    elseif type(http_request)=="function"                     then fn=http_request
+    elseif http and type(http.request)=="function"            then fn=http.request
+    end
+    if not fn then return nil,"No HTTP function found" end
+    local ok,res = pcall(fn,opts)
+    if not ok then return nil,tostring(res) end
+    return res,nil
+end
+
+-- ══════════════════════════════════════════
+--  KEYAUTH API
+-- ══════════════════════════════════════════
+local _kaSession = nil
+
+local function _kaInit()
+    local guid = HttpService:GenerateGUID(false):sub(1,32)
+    local body = ("type=init&ver=%s&hash=&enckey=%s&name=%s&ownerid=%s&secret=%s"):format(
+        KA_VER,
+        HttpService:UrlEncode(guid),
+        HttpService:UrlEncode(KA_NAME),
+        HttpService:UrlEncode(KA_OWNERID),
+        HttpService:UrlEncode(KA_SECRET)
+    )
+    local res,err = _kaRequest({
+        Url=KA_URL, Method="POST",
+        Headers={["Content-Type"]="application/x-www-form-urlencoded"},
+        Body=body,
+    })
+    if err or not res then return false,"Network error: "..(err or "no response") end
+    local ok,data = pcall(function() return HttpService:JSONDecode(res.Body) end)
+    if not ok or not data then return false,"Bad init response" end
+    if not data.success then return false,tostring(data.message or "Init failed") end
+    _kaSession = data.sessionid
+    return true,"OK"
+end
+
+local function _kaLicense(key)
+    if not _kaSession then return false,"Session not initialised" end
+    local hwid = tostring(LocalPlayer.UserId)
+    local body = ("type=license&key=%s&hwid=%s&sessionid=%s&name=%s&ownerid=%s"):format(
+        HttpService:UrlEncode(key),
+        HttpService:UrlEncode(hwid),
+        HttpService:UrlEncode(_kaSession),
+        HttpService:UrlEncode(KA_NAME),
+        HttpService:UrlEncode(KA_OWNERID)
+    )
+    local res,err = _kaRequest({
+        Url=KA_URL, Method="POST",
+        Headers={["Content-Type"]="application/x-www-form-urlencoded"},
+        Body=body,
+    })
+    if err or not res then return false,"Network error: "..(err or "no response") end
+    local ok,data = pcall(function() return HttpService:JSONDecode(res.Body) end)
+    if not ok or not data then return false,"Bad license response" end
+    return data.success==true, tostring(data.message or (data.success and "Accepted" or "Invalid key"))
+end
+
+-- ══════════════════════════════════════════
+--  KEY GATE UI
+-- ══════════════════════════════════════════
+local _keyPassed = false
+
+do
+    local _saved = ""
+    pcall(function()
+        if type(isfile)=="function" and isfile("TravHub_v39_Key.txt") then
+            _saved = readfile("TravHub_v39_Key.txt"):gsub("%s+","")
+        end
+    end)
+
+    local _gui = Instance.new("ScreenGui")
+    _gui.Name="TravHubKeyGate"; _gui.ResetOnSpawn=false
+    _gui.DisplayOrder=9999; _gui.ZIndexBehavior=Enum.ZIndexBehavior.Global
+    pcall(function() _gui.Parent=LocalPlayer.PlayerGui end)
+    if not _gui.Parent then pcall(function() _gui.Parent=LocalPlayer:WaitForChild("PlayerGui",5) end) end
+
+    local _overlay = Instance.new("Frame")
+    _overlay.Size=UDim2.new(1,0,1,0); _overlay.BackgroundColor3=Color3.new(0,0,0)
+    _overlay.BackgroundTransparency=0.45; _overlay.BorderSizePixel=0; _overlay.ZIndex=1
+    _overlay.Parent=_gui
+
+    local _panel = Instance.new("Frame")
+    _panel.Size=UDim2.new(0,490,0,240); _panel.Position=UDim2.new(0.5,-245,0.5,-120)
+    _panel.BackgroundColor3=Color3.fromRGB(12,4,28); _panel.BackgroundTransparency=0.05
+    _panel.BorderSizePixel=0; _panel.ZIndex=2; _panel.Active=true; _panel.Parent=_gui
+
+    local _stroke = Instance.new("UIStroke")
+    _stroke.Color=Color3.fromRGB(160,80,255); _stroke.Thickness=2; _stroke.Parent=_panel
+
+    local function _mkC(xA,yA,w,h)
+        local f=Instance.new("Frame"); f.Size=UDim2.new(0,w,0,h)
+        f.Position=UDim2.new(xA,0,yA,0); f.BackgroundColor3=Color3.fromRGB(200,130,255)
+        f.BorderSizePixel=0; f.ZIndex=3; f.Parent=_panel
+    end
+    _mkC(0,0,22,2);_mkC(0,0,2,22);_mkC(1,0,-22,2);_mkC(1,0,-2,22)
+    _mkC(0,1,22,-2);_mkC(0,1,2,-22);_mkC(1,1,-22,-2);_mkC(1,1,-2,-22)
+
+    local function _lbl(txt,y,sz,col,vis)
+        local l=Instance.new("TextLabel"); l.Size=UDim2.new(1,0,0,sz+4)
+        l.Position=UDim2.new(0,0,0,y); l.BackgroundTransparency=1; l.Text=txt
+        l.TextColor3=col; l.Font=Enum.Font.GothamBold; l.TextSize=sz
+        l.ZIndex=3; l.Visible=vis~=false; l.Parent=_panel; return l
+    end
+    _lbl("TRAV HUB",8,36,Color3.fromRGB(200,130,255))
+    _lbl("Project Delta  ·  Crystal Edition  ·  v3.9",54,12,Color3.fromRGB(160,130,200))
+
+    local _sep=Instance.new("Frame"); _sep.Size=UDim2.new(1,-48,0,1); _sep.Position=UDim2.new(0,24,0,80)
+    _sep.BackgroundColor3=Color3.fromRGB(100,60,160); _sep.BorderSizePixel=0; _sep.ZIndex=3; _sep.Parent=_panel
+
+    local _step=_lbl("⟳  Connecting to KeyAuth...",88,12,Color3.fromRGB(160,130,200))
+    _step.Font=Enum.Font.Gotham
+
+    local _prmpt=_lbl("Enter your license key:",108,12,Color3.fromRGB(220,200,255),false)
+    _prmpt.Font=Enum.Font.Gotham
+
+    local _tb=Instance.new("TextBox"); _tb.Size=UDim2.new(1,-80,0,34)
+    _tb.Position=UDim2.new(0,40,0,130); _tb.BackgroundColor3=Color3.fromRGB(28,8,58)
+    _tb.BackgroundTransparency=0.1; _tb.BorderSizePixel=0; _tb.TextColor3=Color3.fromRGB(255,255,255)
+    _tb.PlaceholderText=""; _tb.Font=Enum.Font.Gotham; _tb.TextSize=14
+    _tb.ClearTextOnFocus=false; _tb.TextTruncate=Enum.TextTruncate.AtEnd
+    _tb.ZIndex=4; _tb.Visible=false; _tb.Parent=_panel
+    local _tbS=Instance.new("UIStroke"); _tbS.Color=Color3.fromRGB(160,80,255); _tbS.Thickness=1.5; _tbS.Parent=_tb
+
+    local _hint=_lbl("Please wait...",_panel.Size.Y.Offset-26,11,Color3.fromRGB(120,100,160))
+    _hint.Font=Enum.Font.Gotham
+
+    -- Drag
+    local _drag=Instance.new("Frame"); _drag.Size=UDim2.new(1,0,0,128)
+    _drag.Position=UDim2.new(0,0,0,0); _drag.BackgroundTransparency=1; _drag.ZIndex=5; _drag.Parent=_panel
+    local _dg,_ds,_dp=false,nil,nil
+    _drag.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then _dg=true;_ds=i.Position;_dp=_panel.Position end end)
+    _drag.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then _dg=false end end)
+    UserInputService.InputChanged:Connect(function(i)
+        if _dg and i.UserInputType==Enum.UserInputType.MouseMovement then
+            local d=i.Position-_ds
+            _panel.Position=UDim2.new(_dp.X.Scale,_dp.X.Offset+d.X,_dp.Y.Scale,_dp.Y.Offset+d.Y)
+        end
+    end)
+
+    local _busy=false; local _attempts=0
+    local function _setHint(t,c) _hint.Text=t; _hint.TextColor3=c end
+    local function _fadeOut()
+        for i=0,10 do
+            local t=i/10
+            pcall(function() _overlay.BackgroundTransparency=0.45+t*0.55 end)
+            pcall(function() _panel.BackgroundTransparency=0.05+t*0.95 end)
+            task.wait(0.016)
+        end
+        pcall(function() _gui:Destroy() end)
+        _keyPassed=true
+    end
+
+    local function _showInput()
+        _step.Visible=false; _prmpt.Visible=true; _tb.Visible=true; _tb.TextEditable=true
+        task.wait(0.1); pcall(function() _tb:CaptureFocus() end)
+        _setHint("Type or paste your key, then press ENTER",Color3.fromRGB(120,100,160))
+    end
+
+    local function _validate(key)
+        local k=key:gsub("%s+","")
+        if _busy or #k<4 then return end
+        _busy=true; _tb.TextEditable=false
+        _tbS.Color=Color3.fromRGB(180,160,255)
+        _setHint("⟳  Checking key...",Color3.fromRGB(180,160,255))
+        task.spawn(function()
+            local ok,msg=_kaLicense(k)
+            if ok then
+                pcall(function() if type(writefile)=="function" then writefile("TravHub_v39_Key.txt",k) end end)
+                _tbS.Color=Color3.fromRGB(80,255,120)
+                _setHint("✦  Key accepted — loading hub...  ✦",Color3.fromRGB(80,255,120))
+                task.wait(0.8); _fadeOut()
+            else
+                _attempts+=1
+                _setHint(("✗  %s  (%d attempt%s)"):format(msg,_attempts,_attempts~=1 and "s" or ""),Color3.fromRGB(255,80,80))
+                _tbS.Color=Color3.fromRGB(255,80,80)
+                _tb.Text=""; _prmpt.Visible=true; _tb.Visible=true; _tb.TextEditable=true
+                _busy=false; task.wait(0.15); pcall(function() _tb:CaptureFocus() end)
+                task.wait(2.5)
+                if not _keyPassed then _tbS.Color=Color3.fromRGB(160,80,255); _setHint("Type or paste your key, then press ENTER",Color3.fromRGB(120,100,160)) end
+            end
+        end)
+    end
+
+    _tb.FocusLost:Connect(function(enter) if enter and not _busy then _validate(_tb.Text) end end)
+
+    -- Timeout guard — never hang forever
+    local _initDone=false
+    task.delay(12,function()
+        if not _initDone and not _keyPassed then
+            _step.Text="⚠ Connection slow — enter key manually"
+            _step.TextColor3=Color3.fromRGB(255,200,80)
+            _showInput()
+        end
+    end)
+
+    task.spawn(function()
+        ShowInfo("Connecting to KeyAuth...")
+        local initOk,initMsg=_kaInit()
+        _initDone=true
+        if not initOk then
+            ShowInfo("KeyAuth init failed: "..initMsg)
+            _step.Text="✗  "..initMsg; _step.TextColor3=Color3.fromRGB(255,100,100)
+            _setHint("Retrying...",Color3.fromRGB(255,150,80)); task.wait(3)
+            initOk,initMsg=_kaInit()
+            if not initOk then
+                ShowInfo("Retry failed — showing input")
+                _step.Text="⚠ Can't reach KeyAuth"; _step.TextColor3=Color3.fromRGB(255,120,0)
+                _setHint("Enter key manually (offline mode)",Color3.fromRGB(255,180,80))
+                _showInput(); return
+            end
+        end
+        _step.Text="✦  Connected"; _step.TextColor3=Color3.fromRGB(100,255,160)
+        ShowInfo("Connected. Checking saved key...")
+        task.wait(0.4)
+        if _saved~="" then
+            _setHint("⟳  Checking saved key...",Color3.fromRGB(180,160,255))
+            _validate(_saved)
+        else
+            _showInput()
+        end
+    end)
+
+    while not _keyPassed do task.wait(0.05) end
+end
 
 ShowInfo("Key gate passed. Loading hub...")
 
@@ -228,6 +466,12 @@ local S = {
     CrosshairSize=18, CrosshairGap=5, CrosshairThick=2,
     CrosshairRainbow=false, CrosshairSpin=false, CrosshairSpinSpeed=90,
     CrosshairOpacity=0,
+    -- Rivals Aimbot
+    RivalsEnabled=false, RivalsMode="Smooth", RivalsKey="MouseButton2",
+    RivalsSmooth=0.10, RivalsBlatant=0.55,
+    RivalsPart="Head", RivalsLock=false, RivalsTeamCheck=false,
+    RivalsFOV=180, RivalsFOVVisible=true, RivalsFOVColor=Color3.fromRGB(255,60,60),
+    RivalsPredict=false, RivalsPredictStr=0.5,
 }
 
 -- ══════════════════════════════════════════
@@ -320,6 +564,8 @@ local FOVCircle    = NewDraw("Circle",{Visible=false,Thickness=1.5,Color=S.FOVCo
 local LockDot      = NewDraw("Circle",{Visible=false,Filled=true,Color=Color3.fromRGB(255,60,60),Radius=4,NumSides=16,Thickness=0})
 local AIFOVCircle  = NewDraw("Circle",{Visible=false,Thickness=1.5,Color=Color3.fromRGB(255,160,30),Filled=false,NumSides=64})
 local AILockDot    = NewDraw("Circle",{Visible=false,Filled=true,Color=Color3.fromRGB(255,160,30),Radius=4,NumSides=16,Thickness=0})
+local RivalsFOVCircle = NewDraw("Circle",{Visible=false,Thickness=1.5,Color=Color3.fromRGB(255,60,60),Filled=false,NumSides=64})
+local RivalsLockDot   = NewDraw("Circle",{Visible=false,Filled=true,Color=Color3.fromRGB(255,60,60),Radius=4,NumSides=16,Thickness=0})
 
 -- ══════════════════════════════════════════
 --  CROSSHAIR DRAWINGS
@@ -1317,779 +1563,6 @@ local function RunAimbot(camCF,dt)
     end
 end
 
--- ══════════════════════════════════════════
---  ZOOM OVERLAY
--- ══════════════════════════════════════════
-local ZO={
-    tlH=NewDraw("Line",{Visible=false,Thickness=2}), tlV=NewDraw("Line",{Visible=false,Thickness=2}),
-    trH=NewDraw("Line",{Visible=false,Thickness=2}), trV=NewDraw("Line",{Visible=false,Thickness=2}),
-    blH=NewDraw("Line",{Visible=false,Thickness=2}), blV=NewDraw("Line",{Visible=false,Thickness=2}),
-    brH=NewDraw("Line",{Visible=false,Thickness=2}), brV=NewDraw("Line",{Visible=false,Thickness=2}),
-    dot  =NewDraw("Circle",{Visible=false,Filled=true,Radius=2,NumSides=12,Thickness=0}),
-    hLine=NewDraw("Line",  {Visible=false,Thickness=1,Transparency=0.72}),
-    vLine=NewDraw("Line",  {Visible=false,Thickness=1,Transparency=0.72}),
-    vigL =NewDraw("Square",{Visible=false,Filled=true,Color=Color3.new(0,0,0),Transparency=0.48}),
-    vigR =NewDraw("Square",{Visible=false,Filled=true,Color=Color3.new(0,0,0),Transparency=0.48}),
-    vigT =NewDraw("Square",{Visible=false,Filled=true,Color=Color3.new(0,0,0),Transparency=0.48}),
-    vigB =NewDraw("Square",{Visible=false,Filled=true,Color=Color3.new(0,0,0),Transparency=0.48}),
-    zLbl =NewDraw("Text",  {Visible=false,Size=12,Outline=true,OutlineColor=Color3.new(0,0,0)}),
-    rf   =NewDraw("Text",  {Visible=false,Size=11,Outline=true,OutlineColor=Color3.new(0,0,0)}),
-}
-local ZO_KEYS={"tlH","tlV","trH","trV","blH","blV","brH","brV","dot","hLine","vLine","vigL","vigR","vigT","vigB","zLbl","rf"}
-local function ShowZoomOverlay(v) for _,k in ipairs(ZO_KEYS) do ZO[k].Visible=v end end
-
--- ══════════════════════════════════════════
---  FPS / PING
--- ══════════════════════════════════════════
-local FPSLabel  = NewDraw("Text",{Visible=false,Size=13,Color=Color3.fromRGB(160,255,160),Outline=true,OutlineColor=Color3.new(0,0,0),Position=Vector2.new(8,8)})
-local PingLabel = NewDraw("Text",{Visible=false,Size=13,Color=Color3.fromRGB(160,200,255),Outline=true,OutlineColor=Color3.new(0,0,0),Position=Vector2.new(8,24)})
-local fpsFrames,fpsElapsed,fpsVal,pingVal = 0,0,0,0
-
--- ══════════════════════════════════════════
---  PLAYER ESP
--- ══════════════════════════════════════════
-local ESPObjects = {}
-local SKEL_PAIRS={
-    {"Head","UpperTorso"},{"Head","Torso"},{"UpperTorso","LowerTorso"},{"Torso","HumanoidRootPart"},
-    {"UpperTorso","LeftUpperArm"},{"UpperTorso","RightUpperArm"},
-    {"LeftUpperArm","LeftLowerArm"},{"RightUpperArm","RightLowerArm"},
-    {"LeftLowerArm","LeftHand"},{"RightLowerArm","RightHand"},
-    {"LowerTorso","LeftUpperLeg"},{"LowerTorso","RightUpperLeg"},
-    {"LeftUpperLeg","LeftLowerLeg"},{"RightUpperLeg","RightLowerLeg"},
-    {"LeftLowerLeg","LeftFoot"},{"RightLowerLeg","RightFoot"},
-    {"Torso","Left Arm"},{"Torso","Right Arm"},{"Torso","Left Leg"},{"Torso","Right Leg"},
-}
-local SKEL_N = #SKEL_PAIRS
-
-local function MakeESP(player)
-    if ESPObjects[player] then return end
-    local sk={}; for i=1,SKEL_N do sk[i]=NewDraw("Line",{Visible=false,Color=Color3.new(1,1,1),Thickness=1}) end
-    ESPObjects[player]={
-        boxOut=NewDraw("Square",{Visible=false,Filled=false,Color=Color3.new(0,0,0),Thickness=4}),
-        box   =NewDraw("Square",{Visible=false,Filled=false,Color=S.BoxColor,Thickness=1.5}),
-        fill  =NewDraw("Square",{Visible=false,Filled=true,Color=S.BoxColor,Transparency=0.88}),
-        c1=NewDraw("Line",{Visible=false,Thickness=2,Color=S.BoxColor}),
-        c2=NewDraw("Line",{Visible=false,Thickness=2,Color=S.BoxColor}),
-        c3=NewDraw("Line",{Visible=false,Thickness=2,Color=S.BoxColor}),
-        c4=NewDraw("Line",{Visible=false,Thickness=2,Color=S.BoxColor}),
-        c5=NewDraw("Line",{Visible=false,Thickness=2,Color=S.BoxColor}),
-        c6=NewDraw("Line",{Visible=false,Thickness=2,Color=S.BoxColor}),
-        c7=NewDraw("Line",{Visible=false,Thickness=2,Color=S.BoxColor}),
-        c8=NewDraw("Line",{Visible=false,Thickness=2,Color=S.BoxColor}),
-        name  =NewDraw("Text",{Visible=false,Center=true,Outline=true,Color=Color3.new(1,1,1),OutlineColor=Color3.new(0,0,0),Size=14}),
-        dist  =NewDraw("Text",{Visible=false,Center=true,Outline=true,Color=Color3.fromRGB(180,180,180),OutlineColor=Color3.new(0,0,0),Size=11}),
-        weapon=NewDraw("Text",{Visible=false,Center=true,Outline=true,Color=Color3.fromRGB(255,200,100),OutlineColor=Color3.new(0,0,0),Size=10}),
-        hpBg  =NewDraw("Square",{Visible=false,Filled=true,Color=Color3.new(0,0,0),Transparency=0.45}),
-        hpBar =NewDraw("Square",{Visible=false,Filled=true,Color=Color3.fromRGB(0,220,0)}),
-        tracer=NewDraw("Line",{Visible=false,Color=S.BoxColor,Thickness=1}),
-        skeleton=sk, _lastDist=-1,
-    }
-end
-
-local function KillESP(p)
-    local o=ESPObjects[p]; if not o then return end
-    for k,d in pairs(o) do
-        if k=="skeleton" then for _,l in ipairs(d) do pcall(function()l:Remove()end) end
-        elseif type(d)~="number" then pcall(function()d:Remove()end) end
-    end
-    ESPObjects[p]=nil
-end
-
-local function HideESP(o)
-    o.boxOut.Visible=false;o.box.Visible=false;o.fill.Visible=false
-    o.c1.Visible=false;o.c2.Visible=false;o.c3.Visible=false;o.c4.Visible=false
-    o.c5.Visible=false;o.c6.Visible=false;o.c7.Visible=false;o.c8.Visible=false
-    o.name.Visible=false;o.dist.Visible=false;o.weapon.Visible=false
-    o.hpBg.Visible=false;o.hpBar.Visible=false;o.tracer.Visible=false
-    local sk=o.skeleton; for i=1,SKEL_N do sk[i].Visible=false end
-end
-
-local function DrawCornerBox(o,bx,by,bw,bh,col)
-    o.box.Visible=false;o.fill.Visible=false;o.boxOut.Visible=false
-    local cLen=mmax(mfloor(bw*0.25),5)
-    o.c1.From=Vector2.new(bx,by);       o.c1.To=Vector2.new(bx+cLen,by);      o.c1.Color=col; o.c1.Visible=true
-    o.c2.From=Vector2.new(bx,by);       o.c2.To=Vector2.new(bx,by+cLen);      o.c2.Color=col; o.c2.Visible=true
-    o.c3.From=Vector2.new(bx+bw,by);    o.c3.To=Vector2.new(bx+bw-cLen,by);   o.c3.Color=col; o.c3.Visible=true
-    o.c4.From=Vector2.new(bx+bw,by);    o.c4.To=Vector2.new(bx+bw,by+cLen);   o.c4.Color=col; o.c4.Visible=true
-    o.c5.From=Vector2.new(bx,by+bh);    o.c5.To=Vector2.new(bx+cLen,by+bh);   o.c5.Color=col; o.c5.Visible=true
-    o.c6.From=Vector2.new(bx,by+bh);    o.c6.To=Vector2.new(bx,by+bh-cLen);   o.c6.Color=col; o.c6.Visible=true
-    o.c7.From=Vector2.new(bx+bw,by+bh); o.c7.To=Vector2.new(bx+bw-cLen,by+bh);o.c7.Color=col; o.c7.Visible=true
-    o.c8.From=Vector2.new(bx+bw,by+bh); o.c8.To=Vector2.new(bx+bw,by+bh-cLen);o.c8.Color=col; o.c8.Visible=true
-end
-
-local function UpdatePlayerESP(myRoot,rcol)
-    local bottom=VP_BOT
-    for _,player in ipairs(Players:GetPlayers()) do
-        if player==LocalPlayer then continue end
-        if not ESPObjects[player] then MakeESP(player) end
-        local o=ESPObjects[player]
-        if not S.ESPEnabled then HideESP(o); continue end
-        local char=player.Character
-        if not char or (S.ESPTeamCheck and player.Team==LocalPlayer.Team) then HideESP(o); continue end
-        local hum=char:FindFirstChildOfClass("Humanoid")
-        if not hum or hum.Health<=0 then HideESP(o); continue end
-        local root=char:FindFirstChild("HumanoidRootPart")
-        local head=char:FindFirstChild("Head")
-        if not root or not head then HideESP(o); continue end
-        local myPos=myRoot and myRoot.Position
-        local dist=0
-        if myPos then
-            local dx=myPos.X-root.Position.X; local dy=myPos.Y-root.Position.Y; local dz=myPos.Z-root.Position.Z
-            dist=mfloor((dx*dx+dy*dy+dz*dz)^0.5)
-        end
-        if dist>S.ESPMaxDist then HideESP(o); continue end
-        local rPos,onScreen=W2S(root.Position)
-        if not onScreen then HideESP(o); continue end
-        local headTopY=head.Position.Y+(head.Size.Y*0.5)+0.1
-        local hPos=W2S(Vector3.new(head.Position.X,headTopY,head.Position.Z))
-        local bh=mmax(rPos.Y-hPos.Y,14); local bw=mmax(bh*0.50,10)
-        local bx=rPos.X-bw*0.5; local by=hPos.Y
-        local col=rcol or S.BoxColor
-        if S.ESPBoxEnabled then
-            if S.ESPCornerBox then
-                DrawCornerBox(o,bx,by,bw,bh,col)
-            else
-                o.c1.Visible=false;o.c2.Visible=false;o.c3.Visible=false;o.c4.Visible=false
-                o.c5.Visible=false;o.c6.Visible=false;o.c7.Visible=false;o.c8.Visible=false
-                o.boxOut.Size=Vector2.new(bw+2,bh+2);o.boxOut.Position=Vector2.new(bx-1,by-1);o.boxOut.Visible=true
-                o.box.Color=col;o.box.Size=Vector2.new(bw,bh);o.box.Position=Vector2.new(bx,by);o.box.Visible=true
-                if S.ESPFillBox then
-                    o.fill.Color=col;o.fill.Size=Vector2.new(bw,bh);o.fill.Position=Vector2.new(bx,by);o.fill.Visible=true
-                else o.fill.Visible=false end
-            end
-        else
-            o.boxOut.Visible=false;o.box.Visible=false;o.fill.Visible=false
-            o.c1.Visible=false;o.c2.Visible=false;o.c3.Visible=false;o.c4.Visible=false
-            o.c5.Visible=false;o.c6.Visible=false;o.c7.Visible=false;o.c8.Visible=false
-        end
-        if S.ESPNames then
-            local nm=player.DisplayName~=player.Name and (player.DisplayName.." ("..player.Name..")") or player.Name
-            o.name.Text=nm;o.name.Size=S.ESPTextSize
-            o.name.Position=Vector2.new(rPos.X,by-S.ESPTextSize-3);o.name.Visible=true
-        else o.name.Visible=false end
-        if S.ESPDistance then
-            if o._lastDist~=dist then o._lastDist=dist;o.dist.Text=dist.." m" end
-            o.dist.Position=Vector2.new(rPos.X,rPos.Y+3);o.dist.Visible=true
-        else o.dist.Visible=false end
-        if S.ESPWeapon then
-            local wpn=WeaponCache[player] or ""
-            if wpn~="" then o.weapon.Text="["..wpn.."]";o.weapon.Position=Vector2.new(rPos.X,rPos.Y+15);o.weapon.Visible=true
-            else o.weapon.Visible=false end
-        else o.weapon.Visible=false end
-        if S.ESPHealthBars then
-            local pct=mclamp(hum.Health/mmax(hum.MaxHealth,1),0,1)
-            o.hpBg.Size=Vector2.new(5,bh+2);o.hpBg.Position=Vector2.new(bx-8,by-1);o.hpBg.Visible=true
-            o.hpBar.Color=Color3.fromRGB(mfloor((1-pct)*255),mfloor(pct*220),0)
-            o.hpBar.Size=Vector2.new(5,bh*pct);o.hpBar.Position=Vector2.new(bx-8,by+bh*(1-pct));o.hpBar.Visible=true
-        else o.hpBg.Visible=false;o.hpBar.Visible=false end
-        if S.ESPTracers then
-            o.tracer.Color=col;o.tracer.From=bottom;o.tracer.To=rPos;o.tracer.Visible=true
-        else o.tracer.Visible=false end
-        if S.ESPSkeleton then
-            for i,pair in ipairs(SKEL_PAIRS) do
-                local line=o.skeleton[i]
-                local pA=char:FindFirstChild(pair[1]);local pB=char:FindFirstChild(pair[2])
-                if pA and pB then
-                    local sA,oA=W2S(pA.Position);local sB,oB=W2S(pB.Position)
-                    if oA and oB then line.From=sA;line.To=sB;line.Color=col;line.Visible=true
-                    else line.Visible=false end
-                else line.Visible=false end
-            end
-        else local sk=o.skeleton; for i=1,SKEL_N do sk[i].Visible=false end end
-    end
-end
-
--- ══════════════════════════════════════════
---  AI ESP
--- ══════════════════════════════════════════
-local AIESPObjects={}
-local aiCandidates={}
-local _aiWasEnabled=false
-
-local function _AIAdd(m)
-    if aiCandidates[m] then return end
-    if not m:IsA("Model") then return end
-    if IsPlayerChar(m) or m==LocalPlayer.Character then return end
-    local h=m:FindFirstChildOfClass("Humanoid"); local root=m:FindFirstChild("HumanoidRootPart")
-    if h and root then aiCandidates[m]={model=m,hum=h,root=root,head=m:FindFirstChild("Head")} end
-end
-local function _AIRemove(m) aiCandidates[m]=nil end
-local function _AIBootstrap() for _,m in ipairs(Workspace:GetDescendants()) do _AIAdd(m) end end
-
-local function GetOrMakeAIESP(m)
-    if AIESPObjects[m] then return AIESPObjects[m] end
-    local o={
-        boxOut=NewDraw("Square",{Visible=false,Filled=false,Color=Color3.new(0,0,0),Thickness=3}),
-        box   =NewDraw("Square",{Visible=false,Filled=false,Color=S.AIBoxColor,Thickness=1.5}),
-        fill  =NewDraw("Square",{Visible=false,Filled=true,Color=S.AIBoxColor,Transparency=0.88}),
-        name  =NewDraw("Text",  {Visible=false,Center=true,Outline=true,Color=S.AIBoxColor,OutlineColor=Color3.new(0,0,0),Size=13}),
-        dist  =NewDraw("Text",  {Visible=false,Center=true,Outline=true,Color=Color3.fromRGB(200,180,140),OutlineColor=Color3.new(0,0,0),Size=11}),
-        hpBg  =NewDraw("Square",{Visible=false,Filled=true,Color=Color3.new(0,0,0),Transparency=0.45}),
-        hpBar =NewDraw("Square",{Visible=false,Filled=true,Color=Color3.fromRGB(255,140,0)}),
-        tracer=NewDraw("Line",  {Visible=false,Color=S.AIBoxColor,Thickness=1}),
-        _lastDist=-1,
-    }
-    AIESPObjects[m]=o; return o
-end
-
-local function HideAI(o)
-    o.boxOut.Visible=false;o.box.Visible=false;o.fill.Visible=false
-    o.name.Visible=false;o.dist.Visible=false;o.hpBg.Visible=false;o.hpBar.Visible=false;o.tracer.Visible=false
-end
-local function KillAIESP(m)
-    local o=AIESPObjects[m]; if not o then return end
-    for _,k in ipairs({"boxOut","box","fill","name","dist","hpBg","hpBar","tracer"}) do pcall(function()o[k]:Remove()end) end
-    AIESPObjects[m]=nil
-end
-
-local aiLockedTarget=nil; local lastAITargetPos={}; local _prevAILockedTarget=nil
-
-local AimKeyMap={
-    MouseButton2=function() return UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) end,
-    C=function() return UserInputService:IsKeyDown(Enum.KeyCode.C) end,
-    Q=function() return UserInputService:IsKeyDown(Enum.KeyCode.Q) end,
-    E=function() return UserInputService:IsKeyDown(Enum.KeyCode.E) end,
-    F=function() return UserInputService:IsKeyDown(Enum.KeyCode.F) end,
-}
-local function IsAimKeyDown(key) local fn=AimKeyMap[key or S.AimKey]; return fn and fn() or false end
-
-local function GetBestAITarget()
-    local cx=VP_CX; local cy=VP_CY
-    local acquireFOV=S.AIAimbotFOV
-    local keepFOV=acquireFOV*3.0
-
-    if S.AIAimbotLock and aiLockedTarget then
-        local m=aiLockedTarget; local entry=aiCandidates[m]
-        local valid=false
-        if entry and m.Parent and entry.hum.Health>0 then
-            local part=m:FindFirstChild(S.AIAimbotPart) or entry.root
-            if part then
-                local sp,on=W2S(part.Position)
-                if on then
-                    local dx=sp.X-cx; local dy=sp.Y-cy
-                    if (dx*dx+dy*dy)^0.5<keepFOV then valid=true end
-                end
-            end
-        end
-        if valid then return aiLockedTarget end
-        lastAITargetPos[aiLockedTarget]=nil
-        aiLockedTarget=nil
-    end
-
-    local best,bd=nil,mhuge
-    for m,entry in pairs(aiCandidates) do
-        if not m.Parent or entry.hum.Health<=0 then continue end
-        local part=m:FindFirstChild(S.AIAimbotPart) or entry.root
-        if part then
-            local sp,on=W2S(part.Position)
-            if on then
-                local dx=sp.X-cx; local dy=sp.Y-cy; local d=(dx*dx+dy*dy)^0.5
-                if d<acquireFOV and d<bd then bd=d; best=m end
-            end
-        end
-    end
-    if best then
-        if best~=_prevAILockedTarget then lastAITargetPos[best]=nil; _prevAILockedTarget=best end
-        if S.AIAimbotLock then aiLockedTarget=best end
-    end
-    return best
-end
-
-local function RunAIAimbot(camCF,dt)
-    AIFOVCircle.Position=Vector2.new(VP_CX,VP_CY); AIFOVCircle.Radius=S.AIAimbotFOV
-    AIFOVCircle.Color=S.AIFOVColor; AIFOVCircle.Visible=S.AIAimbotEnabled and S.AIFOVVisible
-    if not S.AIAimbotEnabled then AILockDot.Visible=false; return end
-    local target=GetBestAITarget()
-    if target then
-        local entry=aiCandidates[target]
-        if entry then
-            local part=target:FindFirstChild(S.AIAimbotPart) or entry.root
-            if part then local sp,on=W2S(part.Position); AILockDot.Position=sp; AILockDot.Visible=on end
-        end
-    else AILockDot.Visible=false end
-    if not IsAimKeyDown(S.AIAimbotKey) or not target then return end
-    local entry=aiCandidates[target]; if not entry then return end
-    local part=target:FindFirstChild(S.AIAimbotPart) or entry.root; if not part then return end
-    local pos=part.Position
-    local prev=lastAITargetPos[target]; lastAITargetPos[target]=pos
-    if prev then pos=pos+(pos-prev)*2 end  -- simple 2-frame prediction for AI
-    local targetCF=CFrame.new(camCF.Position,pos)
-    local safeDt=mclamp(dt,0.001,0.05)
-    if S.AIAimbotMode=="Instant" then
-        pcall(function() Camera.CFrame=targetCF end)
-    elseif S.AIAimbotMode=="Blatant" then
-        local alpha=mclamp(1-(1-S.AIAimbotBlatant)^(safeDt*60),0.01,0.99)
-        pcall(function() Camera.CFrame=camCF:Lerp(targetCF,alpha) end)
-    else
-        local sp2d=W2S(pos); local dx2=sp2d.X-VP_CX; local dy2=sp2d.Y-VP_CY
-        local distBoost=mclamp((dx2*dx2+dy2*dy2)^0.5/mmax(S.AIAimbotFOV,1),0,1)*S.AIAimbotSmooth*0.8
-        local alpha=mclamp(1-(1-(S.AIAimbotSmooth+distBoost))^(safeDt*60),0.005,0.95)
-        pcall(function() Camera.CFrame=camCF:Lerp(targetCF,alpha) end)
-    end
-end
-
-local function UpdateAIESP(myRoot)
-    if not S.AIESPEnabled then
-        if _aiWasEnabled then for m in pairs(AIESPObjects) do KillAIESP(m) end; _aiWasEnabled=false end
-        return
-    end
-    _aiWasEnabled=true
-    local bottom=VP_BOT
-    local rcol=S.AIESPRainbow and RainbowHSV(0.4,0.33) or nil
-    local myPos=myRoot and myRoot.Position
-    for m,entry in pairs(aiCandidates) do
-        if not m.Parent then aiCandidates[m]=nil; KillAIESP(m); continue end
-        local hum=entry.hum; local root=entry.root; local head=entry.head
-        local o=GetOrMakeAIESP(m)
-        if not root or hum.Health<=0 then HideAI(o); continue end
-        local dist=0
-        if myPos then
-            local dx=myPos.X-root.Position.X; local dy=myPos.Y-root.Position.Y; local dz=myPos.Z-root.Position.Z
-            dist=mfloor((dx*dx+dy*dy+dz*dz)^0.5)
-        end
-        if dist>S.AIESPMaxDist then HideAI(o); continue end
-        local rPos,onScreen=W2S(root.Position)
-        if not onScreen then HideAI(o); continue end
-        local hTopY=head and (head.Position.Y+(head.Size and head.Size.Y*0.5 or 0.5)+0.1) or root.Position.Y+3
-        local hPos=W2S(Vector3.new(root.Position.X,hTopY,root.Position.Z))
-        local bh=mmax(rPos.Y-hPos.Y,14); local bw=mmax(bh*0.50,10)
-        local bx=rPos.X-bw*0.5; local by=hPos.Y
-        local col=rcol or S.AIBoxColor
-        o.boxOut.Size=Vector2.new(bw+2,bh+2);o.boxOut.Position=Vector2.new(bx-1,by-1);o.boxOut.Visible=true
-        o.box.Color=col;o.box.Size=Vector2.new(bw,bh);o.box.Position=Vector2.new(bx,by);o.box.Visible=true
-        o.fill.Color=col;o.fill.Size=Vector2.new(bw,bh);o.fill.Position=Vector2.new(bx,by);o.fill.Visible=true
-        if S.AIESPNames then o.name.Text=m.Name;o.name.Position=Vector2.new(rPos.X,by-15);o.name.Color=col;o.name.Visible=true
-        else o.name.Visible=false end
-        if o._lastDist~=dist then o._lastDist=dist;o.dist.Text=dist.." m" end
-        o.dist.Position=Vector2.new(rPos.X,rPos.Y+3);o.dist.Visible=true
-        if S.AIESPHealth then
-            local pct=mclamp(hum.Health/mmax(hum.MaxHealth,1),0,1)
-            o.hpBg.Size=Vector2.new(5,bh+2);o.hpBg.Position=Vector2.new(bx-8,by-1);o.hpBg.Visible=true
-            o.hpBar.Color=Color3.fromRGB(mfloor((1-pct)*255),mfloor(pct*180),0)
-            o.hpBar.Size=Vector2.new(5,bh*pct);o.hpBar.Position=Vector2.new(bx-8,by+bh*(1-pct));o.hpBar.Visible=true
-        else o.hpBg.Visible=false;o.hpBar.Visible=false end
-        if S.AIESPTracers then o.tracer.Color=col;o.tracer.From=bottom;o.tracer.To=rPos;o.tracer.Visible=true
-        else o.tracer.Visible=false end
-    end
-    for m in pairs(AIESPObjects) do if not aiCandidates[m] then KillAIESP(m) end end
-end
-
--- ══════════════════════════════════════════
---  LOOT ESP
--- ══════════════════════════════════════════
-local LOOT_BLACKLIST={
-    Head=true,Face=true,Torso=true,HumanoidRootPart=true,
-    UpperTorso=true,LowerTorso=true,
-    ["Left Arm"]=true,["Right Arm"]=true,["Left Leg"]=true,["Right Leg"]=true,
-    LeftUpperArm=true,RightUpperArm=true,LeftLowerArm=true,RightLowerArm=true,
-    LeftHand=true,RightHand=true,LeftUpperLeg=true,RightUpperLeg=true,
-    LeftLowerLeg=true,RightLowerLeg=true,LeftFoot=true,RightFoot=true,
-    Baseplate=true,Terrain=true,SpawnLocation=true,Sky=true,Sun=true,
-    Part=true,UnionOperation=true,Decal=true,Texture=true,SpecialMesh=true,
-    -- Project Delta hitbox parts
-    HeadTopHitBox=true,FaceHitBox=true,HeadHitBox=true,BodyHitBox=true,
-    TorsoHitBox=true,ChestHitBox=true,ArmHitBox=true,LegHitBox=true,
-    HandHitBox=true,FootHitBox=true,UpperTorsoHitBox=true,LowerTorsoHitBox=true,
-    LeftArmHitBox=true,RightArmHitBox=true,LeftLegHitBox=true,RightLegHitBox=true,
-    NeckHitBox=true,BackHitBox=true,SpineHitBox=true,
-}
-local LOOT_BAD_KWS={"hitbox","hit_box","hitzone","hit_zone","damagebox","damage_box","hurtbox","hurt_box","collision","nametag","billboard","highlight","selection","attachment"}
-local function _IsBadName(n)
-    local l=n:lower()
-    for _,kw in ipairs(LOOT_BAD_KWS) do if l:find(kw,1,true) then return true end end
-    return false
-end
-
-local LOOT_CATS={
-    Keys={"keycard","key card","access card","id card","passcard","badge","fob","room key","master key","storage key","cabinet key","cell key","red keycard","blue keycard","green keycard","yellow keycard","black keycard","vip key"},
-    Bodies={"body","corpse","dead","ragdoll","remains","victim","fallen","skeleton","bones","player body","dead body","loot body"},
-    Weapons={"gun","pistol","revolver","rifle","carbine","assault","shotgun","pump","smg","submachine","sniper","dmr","marksman","bolt","lmg","machine gun","knife","combat knife","sword","axe","hatchet","weapon","firearm","blade","crossbow","ak","m4","ar15","glock"},
-    Ammo={"ammo","ammunition","bullet","bullets","magazine","mag","round","rounds","shell","shells","clip","cartridge","9mm","556","762","308","12 gauge","buckshot"},
-    Medical={"medkit","med kit","first aid","bandage","gauze","tourniquet","health","heal","syringe","injector","epi","adrenaline","pill","pills","painkiller","morphine","stim","stimulant","blood bag","splint","drug","medication","antidote","food","water","drink","ration"},
-    Valuables={"gold","silver","platinum","gem","gemstone","diamond","ruby","emerald","jewel","jewelry","valuable","rare","artifact","relic","cash","money","wallet","currency","coin","token","credit","loot","treasure","bounty","intel","document","usb"},
-    Containers={"chest","crate","supply crate","loot crate","box","case","briefcase","bag","duffel","backpack","rucksack","stash","cache","container","locker","footlocker","safe","vault","strongbox"},
-    Armor={"helmet","ballistic helmet","tactical helmet","vest","plate carrier","body armor","armor","armour","plates","chest rig","gas mask","respirator","shield"},
-    Explosives={"grenade","frag","flashbang","smoke","incendiary","molotov","explosive","bomb","ied","mine","claymore","landmine","c4","rpg","rocket"},
-    Tools={"toolkit","tool kit","tools","repair kit","screwdriver","lockpick","pick","crowbar","rope","radio","walkie","flashlight","torch","compass","map","gps","tracker","battery","batteries","fuel","parachute"},
-    Other={},
-}
-local LOOT_ICONS={Keys="🔑",Bodies="💀",Weapons="🔫",Ammo="🔹",Medical="💊",Valuables="💎",Containers="📦",Armor="🛡",Explosives="💣",Tools="🔧",Other="·"}
-local ClassifyCache={}
-local function ClassifyItem(name)
-    local l=name:lower()
-    if ClassifyCache[l] then return ClassifyCache[l] end
-    for cat,kws in pairs(LOOT_CATS) do
-        for _,kw in ipairs(kws) do
-            if l:find(kw,1,true) then ClassifyCache[l]=cat; return cat end
-        end
-    end
-    ClassifyCache[l]="Other"; return "Other"
-end
-
-local LootESPObjects={}
-local lootCandidates={}
-local function _LootCheck(inst)
-    if not inst:IsA("BasePart") and not inst:IsA("Model") then return end
-    if IsPlayerChar(inst) then return end
-    local n=inst.Name
-    if n=="" or LOOT_BLACKLIST[n] or _IsBadName(n) then return end
-    local anc=inst.Parent
-    while anc and anc~=Workspace do
-        if IsPlayerChar(anc) then return end
-        if anc==LocalPlayer.Character then return end
-        for _,p in ipairs(Players:GetPlayers()) do if anc==p.Character then return end end
-        anc=anc.Parent
-    end
-    local pos
-    if inst:IsA("BasePart") then pos=inst.Position
-    elseif inst:IsA("Model") then local p=inst.PrimaryPart or inst:FindFirstChildOfClass("BasePart"); if p then pos=p.Position end end
-    if not pos then return end
-    local cat=ClassifyItem(n)
-    if cat=="Other" and #n<4 then return end
-    lootCandidates[inst]={inst=inst,cat=cat}
-end
-local function _LootRemove(inst)
-    if lootCandidates[inst] then lootCandidates[inst]=nil end
-    if LootESPObjects[inst] then
-        local o=LootESPObjects[inst]
-        pcall(function()o.dot:Remove()end);pcall(function()o.label:Remove()end);pcall(function()o.dist:Remove()end)
-        LootESPObjects[inst]=nil
-    end
-end
-local function _LootBootstrap()
-    for _,child in ipairs(Workspace:GetChildren()) do
-        _LootCheck(child)
-        if child:IsA("Folder") or child:IsA("Model") then
-            for _,sub in ipairs(child:GetChildren()) do _LootCheck(sub) end
-        end
-    end
-end
-
-local function MakeLootESP(inst,cat)
-    if LootESPObjects[inst] then return LootESPObjects[inst] end
-    local col=S.LootColors[cat] or Color3.fromRGB(180,180,180)
-    local o={cat=cat,
-        dot  =NewDraw("Circle",{Visible=false,Filled=true,Color=col,Radius=3,NumSides=8,Thickness=0}),
-        label=NewDraw("Text",  {Visible=false,Center=true,Outline=true,Color=col,OutlineColor=Color3.new(0,0,0),Size=S.LootTextSize}),
-        dist =NewDraw("Text",  {Visible=false,Center=true,Outline=true,Color=Color3.fromRGB(160,160,160),OutlineColor=Color3.new(0,0,0),Size=10}),
-        _lastDist=-1,_lastName="",
-    }
-    LootESPObjects[inst]=o; return o
-end
-
-local _lootWasEnabled=false
-local function UpdateLootESP(myRoot)
-    if not S.LootESPEnabled then
-        if _lootWasEnabled then
-            for item in pairs(LootESPObjects) do _LootRemove(item) end
-            _lootWasEnabled=false
-        end; return
-    end
-    _lootWasEnabled=true
-    local myPos=myRoot and myRoot.Position
-    for inst,entry in pairs(lootCandidates) do
-        if not inst.Parent then _LootRemove(inst); continue end
-        local cat=entry.cat
-        if not S.LootFilter[cat] then if LootESPObjects[inst] then _LootRemove(inst) end; continue end
-        local pos
-        if inst:IsA("BasePart") then pos=inst.Position
-        elseif inst:IsA("Model") then local p=inst.PrimaryPart; if p then pos=p.Position end end
-        if not pos then continue end
-        local o=MakeLootESP(inst,cat)
-        local col=S.LootColors[cat] or Color3.fromRGB(180,180,180)
-        o.label.Color=col; o.dot.Color=col
-        local dist=0
-        if myPos then
-            local dx=myPos.X-pos.X; local dy=myPos.Y-pos.Y; local dz=myPos.Z-pos.Z
-            dist=mfloor((dx*dx+dy*dy+dz*dz)^0.5)
-        end
-        if dist>S.LootMaxDist then o.label.Visible=false;o.dot.Visible=false;o.dist.Visible=false; continue end
-        local sp,onScreen=W2S(pos)
-        if not onScreen then o.label.Visible=false;o.dot.Visible=false;o.dist.Visible=false; continue end
-        o.dot.Position=sp; o.dot.Visible=true
-        local lname=inst.Name
-        if o._lastName~=lname then o._lastName=lname; o.label.Text=(LOOT_ICONS[cat] or "·").." "..lname end
-        o.label.Size=S.LootTextSize
-        o.label.Position=Vector2.new(sp.X,sp.Y-16);o.label.Visible=true
-        if o._lastDist~=dist then o._lastDist=dist;o.dist.Text=dist.." m" end
-        o.dist.Position=Vector2.new(sp.X,sp.Y-4);o.dist.Visible=true
-    end
-    for inst in pairs(LootESPObjects) do if not lootCandidates[inst] then _LootRemove(inst) end end
-end
-
--- ══════════════════════════════════════════
---  EXFIL ESP
--- ══════════════════════════════════════════
-local EXFIL_KWS={"exfil","extract","extraction","exit","evac","evacuate","escape","chopper","helicopter","heli","gate","portal","hatch","depart","exit zone","extract zone","end zone"}
-local ExfilNameCache={}
-local function IsExfil(inst)
-    local n=inst.Name:lower()
-    if ExfilNameCache[n]~=nil then return ExfilNameCache[n] end
-    for _,kw in ipairs(EXFIL_KWS) do if n:find(kw,1,true) then ExfilNameCache[n]=true; return true end end
-    ExfilNameCache[n]=false; return false
-end
-local exfilCandidates={}
-local ExfilESPObjects={}
-local function _ExfilCheck(inst)
-    if not (inst:IsA("Model") or inst:IsA("BasePart")) then return end
-    if not IsExfil(inst) then return end
-    local pos
-    if inst:IsA("BasePart") then pos=inst.Position
-    elseif inst:IsA("Model") then local p=inst.PrimaryPart or inst:FindFirstChildOfClass("BasePart"); if p then pos=p.Position end end
-    if pos then exfilCandidates[inst]={inst=inst,pos=pos} end
-end
-local function _ExfilRemove(inst) exfilCandidates[inst]=nil end
-local function _ExfilBootstrap() for _,d in ipairs(Workspace:GetDescendants()) do _ExfilCheck(d) end end
-
-local ExfilArrow={
-    shaft=NewDraw("Line",{Visible=false,Color=Color3.fromRGB(80,255,140),Thickness=2.5}),
-    head1=NewDraw("Line",{Visible=false,Color=Color3.fromRGB(80,255,140),Thickness=2.5}),
-    head2=NewDraw("Line",{Visible=false,Color=Color3.fromRGB(80,255,140),Thickness=2.5}),
-    label=NewDraw("Text",{Visible=false,Size=12,Center=true,Outline=true,OutlineColor=Color3.new(0,0,0),Color=Color3.fromRGB(80,255,140)}),
-}
-
-local function GetOrMakeExfilESP(inst)
-    if ExfilESPObjects[inst] then return ExfilESPObjects[inst] end
-    local o={
-        box    =NewDraw("Square",{Visible=false,Filled=false,Color=S.ExfilColor,Thickness=2}),
-        boxGlow=NewDraw("Square",{Visible=false,Filled=false,Color=S.ExfilColor,Thickness=5,Transparency=0.65}),
-        pulse  =NewDraw("Circle",{Visible=false,Filled=false,Color=S.ExfilColor,Thickness=1.5,NumSides=48,Radius=0}),
-        label  =NewDraw("Text",  {Visible=false,Center=true,Outline=true,Color=S.ExfilColor,OutlineColor=Color3.new(0,0,0),Size=14}),
-        dist   =NewDraw("Text",  {Visible=false,Center=true,Outline=true,Color=Color3.fromRGB(180,255,180),OutlineColor=Color3.new(0,0,0),Size=12}),
-        icon   =NewDraw("Text",  {Visible=false,Center=true,Outline=true,Color=S.ExfilColor,OutlineColor=Color3.new(0,0,0),Size=18}),
-        _pulseT=0,_lastDist=-1,
-    }
-    ExfilESPObjects[inst]=o; return o
-end
-local function KillExfilESP(inst)
-    local o=ExfilESPObjects[inst]; if not o then return end
-    for k,v in pairs(o) do if type(v)~="number" then pcall(function()v:Remove()end) end end
-    ExfilESPObjects[inst]=nil
-end
-local function HideExfil(o)
-    o.box.Visible=false;o.boxGlow.Visible=false;o.pulse.Visible=false
-    o.label.Visible=false;o.dist.Visible=false;o.icon.Visible=false
-end
-
-local _exfilWasEnabled=false
-local function UpdateExfilESP(dt,myRoot)
-    ExfilArrow.shaft.Visible=false;ExfilArrow.head1.Visible=false
-    ExfilArrow.head2.Visible=false;ExfilArrow.label.Visible=false
-    if not S.ExfilESPEnabled then
-        if _exfilWasEnabled then for inst in pairs(ExfilESPObjects) do KillExfilESP(inst) end; _exfilWasEnabled=false end
-        return
-    end
-    _exfilWasEnabled=true
-    local col=S.ExfilRainbow and RainbowHSV(0.3,0.66) or S.ExfilColor
-    local myPos=myRoot and myRoot.Position
-    local nearDist,nearPos=mhuge,nil
-    for inst,entry in pairs(exfilCandidates) do
-        if not inst.Parent then exfilCandidates[inst]=nil; KillExfilESP(inst); continue end
-        local pos=entry.pos
-        local o=GetOrMakeExfilESP(inst)
-        local dist=0
-        if myPos then
-            local dx=myPos.X-pos.X;local dy=myPos.Y-pos.Y;local dz=myPos.Z-pos.Z
-            dist=mfloor((dx*dx+dy*dy+dz*dz)^0.5)
-        end
-        if dist<nearDist then nearDist=dist; nearPos=pos end
-        o.box.Color=col;o.boxGlow.Color=col;o.pulse.Color=col;o.label.Color=col;o.icon.Color=col
-        if not S.ExfilShowDist or dist>S.ExfilMaxDist then HideExfil(o); continue end
-        local sp,onScreen=W2S(pos)
-        if not onScreen then HideExfil(o); continue end
-        local bSz=mclamp(80-dist*0.08,18,80); local bx=sp.X-bSz*0.5; local by=sp.Y-bSz*0.5
-        o.boxGlow.Size=Vector2.new(bSz+6,bSz+6);o.boxGlow.Position=Vector2.new(bx-3,by-3);o.boxGlow.Visible=true
-        o.box.Size=Vector2.new(bSz,bSz);o.box.Position=Vector2.new(bx,by);o.box.Visible=true
-        if S.ExfilPulse then
-            o._pulseT=(o._pulseT+dt*1.2)%1
-            o.pulse.Radius=bSz*0.5+o._pulseT*40; o.pulse.Position=sp
-            o.pulse.Transparency=(1-o._pulseT)*0.1; o.pulse.Visible=true
-        else o.pulse.Visible=false end
-        o.icon.Text="🚁";o.icon.Position=Vector2.new(sp.X,by-22);o.icon.Visible=true
-        o.label.Text=inst.Name;o.label.Size=13;o.label.Position=Vector2.new(sp.X,by-10);o.label.Visible=true
-        if S.ExfilShowDist then
-            if o._lastDist~=dist then o._lastDist=dist;o.dist.Text=dist<1000 and (dist.." m") or sfmt("%.1f km",dist/1000) end
-            o.dist.Position=Vector2.new(sp.X,by+bSz+4);o.dist.Visible=true
-        else o.dist.Visible=false end
-    end
-    for inst in pairs(ExfilESPObjects) do if not exfilCandidates[inst] then KillExfilESP(inst) end end
-    if S.ExfilArrow and nearPos and myRoot then
-        local sp,onScreen=W2S(nearPos)
-        if not onScreen then
-            local cx=VP_CX;local cy=VP_CY
-            local ang=matan2(sp.Y-cy,sp.X-cx); local mar=65
-            local mx=mclamp(cx+mcos(ang)*(cx-mar),mar,VP.X-mar)
-            local my=mclamp(cy+msin(ang)*(cy-mar),mar,VP.Y-mar)
-            local ax=cx+(mx-cx)*0.85;local ay=cy+(my-cy)*0.85
-            local tipX=cx+(mx-cx)*0.93;local tipY=cy+(my-cy)*0.93
-            local h1x,h1y=RotVec(tipX,tipY,-10,-5,ang)
-            local h2x,h2y=RotVec(tipX,tipY,-10,5,ang)
-            ExfilArrow.shaft.From=Vector2.new(ax,ay);ExfilArrow.shaft.To=Vector2.new(tipX,tipY)
-            ExfilArrow.head1.From=Vector2.new(tipX,tipY);ExfilArrow.head1.To=Vector2.new(h1x,h1y)
-            ExfilArrow.head2.From=Vector2.new(tipX,tipY);ExfilArrow.head2.To=Vector2.new(h2x,h2y)
-            local dstr=nearDist<1000 and (nearDist.." m") or sfmt("%.1f km",nearDist/1000)
-            ExfilArrow.label.Text="EXFIL  "..dstr; ExfilArrow.label.Position=Vector2.new(ax,ay-14)
-            for _,d in pairs(ExfilArrow) do pcall(function() d.Color=col; d.Visible=true end) end
-        end
-    end
-end
-
--- ══════════════════════════════════════════
---  UNIFIED WORKSPACE SIGNAL
--- ══════════════════════════════════════════
-Workspace.DescendantAdded:Connect(function(d)
-    task.defer(function()
-        if not d or not d.Parent then return end
-        if d:IsA("Model") then _AIAdd(d) end
-        _LootCheck(d); _ExfilCheck(d)
-    end)
-end)
-Workspace.DescendantRemoving:Connect(function(d)
-    if d:IsA("Model") then aiCandidates[d]=nil end
-    _LootRemove(d); _ExfilRemove(d)
-end)
-
--- ══════════════════════════════════════════
---  PLAYER AIMBOT
--- ══════════════════════════════════════════
-local lockedTarget=nil; local lastTargetPos={}; local _prevLockedTarget=nil
-
---[[
-    AIMBOT FIXES:
-    FIX-A1: Separate acquire FOV vs keep-lock FOV.
-            Lock is maintained up to 3x the FOV radius.
-            This prevents lock dropping while smooth aim is still catching up.
-    FIX-A2: Prediction multiplier removed (*8 caused massive overshoot).
-            Now uses AimbotPredictStr directly as frames-ahead (0.5 to 5).
-    FIX-A3: Smooth and Blatant modes are now frame-rate independent via dt.
-            (1-(1-alpha)^(dt*60)) gives consistent speed at any FPS.)
-    FIX-A4: lastTargetPos is cleared when target changes to prevent
-            bad prediction on the first frame after switching targets.
-]]
-
-local function GetBestTarget()
-    local cx=VP_CX; local cy=VP_CY
-    local acquireFOV=S.AimbotFOV
-    local keepFOV=acquireFOV*3.0  -- keep lock up to 3x radius so smooth aim can catch up
-
-    -- Validate existing locked target (FIX-A1)
-    if S.AimbotLock and lockedTarget then
-        local p=lockedTarget; local char=p and p.Character
-        local valid=false
-        if char and not (S.TeamCheck and p.Team==LocalPlayer.Team) then
-            local hum=char:FindFirstChildOfClass("Humanoid")
-            if hum and hum.Health>0 then
-                local part=char:FindFirstChild(S.AimbotPart) or char:FindFirstChild("HumanoidRootPart")
-                if part then
-                    local sp,on=W2S(part.Position)
-                    -- Only drop lock if VERY far outside FOV or off screen entirely
-                    if on then
-                        local dx=sp.X-cx; local dy=sp.Y-cy
-                        if (dx*dx+dy*dy)^0.5 < keepFOV then valid=true end
-                    end
-                end
-            end
-        end
-        if valid then return lockedTarget end
-        -- Target lost — clear prediction data so next target starts clean
-        lastTargetPos[lockedTarget]=nil
-        lockedTarget=nil
-    end
-
-    -- Find best new target (closest to crosshair within acquire FOV)
-    local best,bd=nil,mhuge
-    for _,p in ipairs(Players:GetPlayers()) do
-        if p~=LocalPlayer and not (S.TeamCheck and p.Team==LocalPlayer.Team) then
-            local char=p.Character
-            if char then
-                local hum=char:FindFirstChildOfClass("Humanoid")
-                if hum and hum.Health>0 then
-                    local part=char:FindFirstChild(S.AimbotPart) or char:FindFirstChild("HumanoidRootPart")
-                    if part then
-                        local sp,on=W2S(part.Position)
-                        if on then
-                            local dx=sp.X-cx; local dy=sp.Y-cy; local d=(dx*dx+dy*dy)^0.5
-                            if d<acquireFOV and d<bd then bd=d; best=p end
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    if best then
-        -- FIX-A4: clear old prediction data when acquiring a new target
-        if best~=_prevLockedTarget then
-            lastTargetPos[best]=nil
-            _prevLockedTarget=best
-        end
-        if S.AimbotLock then lockedTarget=best end
-    end
-    return best
-end
-
-local function RunAimbot(camCF,dt)
-    FOVCircle.Position=Vector2.new(VP_CX,VP_CY); FOVCircle.Radius=S.AimbotFOV
-    FOVCircle.Color=S.FOVColor; FOVCircle.Visible=S.AimbotEnabled and S.FOVVisible
-    if not S.AimbotEnabled then LockDot.Visible=false; return end
-
-    local target=GetBestTarget()
-    if target then
-        local char=target.Character
-        local part=char and (char:FindFirstChild(S.AimbotPart) or char:FindFirstChild("HumanoidRootPart"))
-        if part then local sp,on=W2S(part.Position); LockDot.Position=sp; LockDot.Visible=on end
-    else LockDot.Visible=false end
-
-    if not IsAimKeyDown(S.AimKey) or not target then return end
-
-    local char=target.Character
-    local part=char and (char:FindFirstChild(S.AimbotPart) or char:FindFirstChild("HumanoidRootPart"))
-    if not part then return end
-
-    local pos=part.Position
-
-    -- FIX-A2: Prediction without the *8 overshoot multiplier
-    -- AimbotPredictStr (0.1–1.0 from slider) * 5 = 0.5 to 5 frames ahead
-    if S.AimbotPredict then
-        local prev=lastTargetPos[target]
-        lastTargetPos[target]=pos
-        if prev then
-            local frames=S.AimbotPredictStr*5
-            pos=pos+(pos-prev)*frames
-        end
-    else
-        lastTargetPos[target]=pos
-    end
-
-    local targetCF=CFrame.new(camCF.Position,pos)
-    local safeDt=mclamp(dt,0.001,0.05)  -- clamp dt so lag spikes don't cause jumps
-
-    if S.AimbotMode=="Instant" then
-        pcall(function() Camera.CFrame=targetCF end)
-
-    elseif S.AimbotMode=="Blatant" then
-        -- FIX-A3: frame-rate independent blatant snap
-        local alpha=1-(1-S.AimbotBlatant)^(safeDt*60)
-        alpha=mclamp(alpha,0.01,0.99)
-        pcall(function() Camera.CFrame=camCF:Lerp(targetCF,alpha) end)
-
-    else -- Smooth
-        -- FIX-A3: frame-rate independent smooth tracking
-        -- Slight dynamic boost when target is far from centre so it doesn't crawl
-        local sp2d=W2S(pos)
-        local dx2=sp2d.X-VP_CX; local dy2=sp2d.Y-VP_CY
-        local screenDist=(dx2*dx2+dy2*dy2)^0.5
-        -- boost up to 80% extra speed at edge of FOV, proportional to distance
-        local distBoost=mclamp(screenDist/mmax(S.AimbotFOV,1),0,1)*S.AimbotSmooth*0.8
-        local baseAlpha=S.AimbotSmooth+distBoost
-        -- convert per-frame alpha to frame-rate independent alpha
-        local alpha=1-(1-baseAlpha)^(safeDt*60)
-        alpha=mclamp(alpha,0.005,0.95)
-        pcall(function() Camera.CFrame=camCF:Lerp(targetCF,alpha) end)
-    end
-end
-
--- ══════════════════════════════════════════
 --  ZOOM
 -- ══════════════════════════════════════════
 local zoomTween=nil
@@ -2288,6 +1761,108 @@ end)
 -- ══════════════════════════════════════════
 --  RENDER LOOP
 -- ══════════════════════════════════════════
+-- ══════════════════════════════════════════
+--  RIVALS AIMBOT
+-- ══════════════════════════════════════════
+local rivalsLockedTarget=nil; local lastRivalsTargetPos={}; local _prevRivalsTarget=nil
+
+local function RivalsFindPart(char)
+    if not char then return nil end
+    local priority={"Head","UpperTorso","HumanoidRootPart","Torso"}
+    for _,name in ipairs(priority) do
+        local p=char:FindFirstChild(name)
+        if p and p:IsA("BasePart") then return p end
+    end
+    return char:FindFirstChildWhichIsA("BasePart")
+end
+
+local function RivalsAlive(player)
+    local char=player.Character
+    if not char then return false end
+    local hum=char:FindFirstChildOfClass("Humanoid")
+    if hum and hum.Health<=0 then return false end
+    local ok2,hp=pcall(function() return char:GetAttribute("Health") or char:GetAttribute("HP") end)
+    if ok2 and type(hp)=="number" and hp<=0 then return false end
+    return true
+end
+
+local RivalsAimKeyMap={
+    MouseButton2=function() return UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) end,
+    C=function() return UserInputService:IsKeyDown(Enum.KeyCode.C) end,
+    Q=function() return UserInputService:IsKeyDown(Enum.KeyCode.Q) end,
+    E=function() return UserInputService:IsKeyDown(Enum.KeyCode.E) end,
+    F=function() return UserInputService:IsKeyDown(Enum.KeyCode.F) end,
+}
+local function IsRivalsKeyDown() local fn=RivalsAimKeyMap[S.RivalsKey]; return fn and fn() or false end
+
+local function GetRivalsTarget()
+    local cx=VP_CX; local cy=VP_CY
+    local acquireFOV=S.RivalsFOV; local keepFOV=acquireFOV*3.0
+    if S.RivalsLock and rivalsLockedTarget then
+        local p=rivalsLockedTarget; local char=p and p.Character; local valid=false
+        if char and not (S.RivalsTeamCheck and p.Team==LocalPlayer.Team) then
+            if RivalsAlive(p) then
+                local part=RivalsFindPart(char)
+                if part then
+                    local sp,on=W2S(part.Position)
+                    if on then
+                        local dx=sp.X-cx; local dy=sp.Y-cy
+                        if (dx*dx+dy*dy)^0.5<keepFOV then valid=true end
+                    end
+                end
+            end
+        end
+        if valid then return rivalsLockedTarget end
+        lastRivalsTargetPos[rivalsLockedTarget]=nil; rivalsLockedTarget=nil
+    end
+    local best,bd=nil,mhuge
+    for _,p in ipairs(Players:GetPlayers()) do
+        if p==LocalPlayer then continue end
+        if S.RivalsTeamCheck and p.Team==LocalPlayer.Team then continue end
+        local char=p.Character; if not char then continue end
+        if not RivalsAlive(p) then continue end
+        local part=RivalsFindPart(char); if not part then continue end
+        local sp,on=W2S(part.Position); if not on then continue end
+        local dx=sp.X-cx; local dy=sp.Y-cy; local d=(dx*dx+dy*dy)^0.5
+        if d<acquireFOV and d<bd then bd=d; best=p end
+    end
+    if best then
+        if best~=_prevRivalsTarget then lastRivalsTargetPos[best]=nil; _prevRivalsTarget=best end
+        if S.RivalsLock then rivalsLockedTarget=best end
+    end
+    return best
+end
+
+local function RunRivalsAimbot(camCF,dt)
+    RivalsFOVCircle.Position=Vector2.new(VP_CX,VP_CY); RivalsFOVCircle.Radius=S.RivalsFOV
+    RivalsFOVCircle.Color=S.RivalsFOVColor; RivalsFOVCircle.Visible=S.RivalsEnabled and S.RivalsFOVVisible
+    if not S.RivalsEnabled then RivalsLockDot.Visible=false; return end
+    local target=GetRivalsTarget()
+    if target then
+        local part=RivalsFindPart(target.Character)
+        if part then local sp,on=W2S(part.Position); RivalsLockDot.Position=sp; RivalsLockDot.Visible=on end
+    else RivalsLockDot.Visible=false end
+    if not IsRivalsKeyDown() or not target then return end
+    local part=RivalsFindPart(target.Character); if not part then return end
+    local pos=part.Position
+    if S.RivalsPredict then
+        local prev=lastRivalsTargetPos[target]; lastRivalsTargetPos[target]=pos
+        if prev then pos=pos+(pos-prev)*(S.RivalsPredictStr*5) end
+    else lastRivalsTargetPos[target]=pos end
+    local targetCF=CFrame.new(camCF.Position,pos); local safeDt=mclamp(dt,0.001,0.05)
+    if S.RivalsMode=="Instant" then
+        pcall(function() Camera.CFrame=targetCF end)
+    elseif S.RivalsMode=="Blatant" then
+        local alpha=mclamp(1-(1-S.RivalsBlatant)^(safeDt*60),0.01,0.99)
+        pcall(function() Camera.CFrame=camCF:Lerp(targetCF,alpha) end)
+    else
+        local sp2d=W2S(pos); local dx2=sp2d.X-VP_CX; local dy2=sp2d.Y-VP_CY
+        local distBoost=mclamp((dx2*dx2+dy2*dy2)^0.5/mmax(S.RivalsFOV,1),0,1)*S.RivalsSmooth*0.8
+        local alpha=mclamp(1-(1-(S.RivalsSmooth+distBoost))^(safeDt*60),0.005,0.95)
+        pcall(function() Camera.CFrame=camCF:Lerp(targetCF,alpha) end)
+    end
+end
+
 RunService.RenderStepped:Connect(function(dt)
     _tick=tick()
     fpsFrames=fpsFrames+1; fpsElapsed=fpsElapsed+dt
@@ -2302,7 +1877,7 @@ RunService.RenderStepped:Connect(function(dt)
     local myChar=LocalPlayer.Character
     local myRoot=myChar and myChar:FindFirstChild("HumanoidRootPart")
     lastCamCF=camCF
-    RunAimbot(camCF,dt); RunAIAimbot(camCF,dt)
+    RunAimbot(camCF,dt); RunAIAimbot(camCF,dt); RunRivalsAimbot(camCF,dt)
     local rcol=S.ESPRainbow and RainbowHSV(0.4) or nil
     UpdatePlayerESP(myRoot,rcol)
     UpdateAIESP(myRoot)
@@ -2459,7 +2034,7 @@ T8:CreateSlider({Name="Field of View",Range={50,120},Increment=1,Suffix="°",Cur
 end})
 T8:CreateSection("Crosshair")
 T8:CreateToggle({Name="Enable Crosshair",CurrentValue=false,Flag="V_CH",Callback=function(v)
-    S.CrosshairEnabled=v; if not v then HideAllCrosshair(); _prevStyle="" end
+    S.CrosshairEnabled=v; if not v then HideAllCrosshair(); _prevCHStyle="" end
 end})
 T8:CreateDropdown({Name="Style",Options={"Plus","X","Dot","Circle","T-Shape","KovaaK","Sniper","Diamond","Bracket","Happy Face"},CurrentOption={"Plus"},Flag="V_CHS",Callback=function(v)
     S.CrosshairStyle=v[1] or "Plus"
@@ -2530,6 +2105,30 @@ end})
 T9:CreateSection("About")
 T9:CreateLabel("TravHub v3.9  ·  Crystal Edition  ·  Clean Build")
 T9:CreateLabel("Fixed crosshair  ·  No Trap/Survive tabs  ·  Xeno-compatible")
+
+
+-- ── TAB 10: Rivals Aimbot ──────────────────────────────
+local T10=Window:CreateTab("Rivals Aimbot",4483362458)
+T10:CreateSection("Rivals Aimbot")
+T10:CreateToggle({Name="Enable Rivals Aimbot",CurrentValue=false,Flag="RV_ON",Callback=function(v)
+    S.RivalsEnabled=v; if not v then RivalsLockDot.Visible=false; rivalsLockedTarget=nil end
+end})
+T10:CreateDropdown({Name="Aim Mode",Options={"Smooth","Blatant","Instant"},CurrentOption={"Smooth"},Flag="RV_MODE",Callback=function(v)S.RivalsMode=v[1] or "Smooth" end})
+T10:CreateDropdown({Name="Aim Key",Options={"MouseButton2","C","Q","E","F"},CurrentOption={"MouseButton2"},Flag="RV_KEY",Callback=function(v)S.RivalsKey=v[1] or "MouseButton2" end})
+T10:CreateSection("Targeting")
+T10:CreateDropdown({Name="Target Part",Options={"Head","UpperTorso","HumanoidRootPart","Torso"},CurrentOption={"Head"},Flag="RV_PART",Callback=function(v)S.RivalsPart=v[1] or "Head"; rivalsLockedTarget=nil end})
+T10:CreateToggle({Name="Lock-On",CurrentValue=false,Flag="RV_LOCK",Callback=function(v)S.RivalsLock=v; rivalsLockedTarget=nil end})
+T10:CreateToggle({Name="Team Check",CurrentValue=false,Flag="RV_TM",Callback=function(v)S.RivalsTeamCheck=v end})
+T10:CreateSection("Speed")
+T10:CreateSlider({Name="Smooth Speed",Range={1,25},Increment=1,CurrentValue=5,Flag="RV_SS",Callback=function(v)S.RivalsSmooth=0.025+v*0.014 end})
+T10:CreateSlider({Name="Snap Speed",Range={30,99},Increment=1,Suffix="%",CurrentValue=55,Flag="RV_BS",Callback=function(v)S.RivalsBlatant=v/100 end})
+T10:CreateSection("Prediction")
+T10:CreateToggle({Name="Target Prediction",CurrentValue=false,Flag="RV_PRD",Callback=function(v)S.RivalsPredict=v end})
+T10:CreateSlider({Name="Strength",Range={1,10},Increment=1,CurrentValue=5,Flag="RV_PRS",Callback=function(v)S.RivalsPredictStr=v/10 end})
+T10:CreateSection("FOV")
+T10:CreateSlider({Name="FOV Radius",Range={20,700},Increment=5,Suffix=" px",CurrentValue=180,Flag="RV_FOV",Callback=function(v)S.RivalsFOV=v end})
+T10:CreateToggle({Name="Show FOV Circle",CurrentValue=true,Flag="RV_FOVV",Callback=function(v)S.RivalsFOVVisible=v end})
+T10:CreateColorPicker({Name="FOV Color",Color=Color3.fromRGB(255,60,60),Flag="RV_FOVC",Callback=function(v)S.RivalsFOVColor=v; RivalsFOVCircle.Color=v end})
 
 -- ══════════════════════════════════════════
 --  BOOTSTRAP
