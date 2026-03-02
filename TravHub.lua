@@ -214,7 +214,7 @@ do
     local _tbS=Instance.new("UIStroke"); _tbS.Color=Color3.fromRGB(160,80,255); _tbS.Thickness=1.5; _tbS.Parent=_tb
 
     local _hint=_lbl("Please wait...",_panel.Size.Y.Offset-26,11,Color3.fromRGB(120,100,160))
-    _hint.Font=Enum.Font.Gotham; _hint.TextBounds=Vector2.new(0,0)
+    _hint.Font=Enum.Font.Gotham
 
     -- Drag
     local _drag=Instance.new("Frame"); _drag.Size=UDim2.new(1,0,0,128)
