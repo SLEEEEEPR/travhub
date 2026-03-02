@@ -4,6 +4,46 @@
 -- ╚══════════════════════════════════════════════════════════╝
 
 -- ══════════════════════════════════════════
+--  EARLY ENVIRONMENT CHECKS
+-- ══════════════════════════════════════════
+do
+    -- Drawing API guard
+    if not Drawing then
+        warn("[TravHub] FATAL: Drawing API not available. Use Xeno, Synapse X, or an executor that supports Drawing.")
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("SendNotification",{
+                Title="⚠ TravHub Error",
+                Text="Drawing API not supported by this executor.",
+                Duration=12
+            })
+        end)
+        return
+    end
+
+    -- HttpGet wrapper: prefer executor's own HTTP if available
+    local _rawHttpGet = game.HttpGet
+    local _execHttp = (type(request)=="function" and request)
+                   or (syn and type(syn.request)=="function" and syn.request)
+                   or (type(http_request)=="function" and http_request)
+                   or nil
+
+    if _execHttp then
+        -- Patch game:HttpGet to use executor's HTTP for external URLs
+        local _origHttpGet = function(...) return _rawHttpGet(game, ...) end
+        game.HttpGet = function(self, url, ...)
+            local isExternal = url:sub(1,4) == "http"
+            if isExternal and _execHttp then
+                local ok, res = pcall(_execHttp, {Url=url, Method="GET"})
+                if ok and res and res.Body then return res.Body end
+            end
+            return _origHttpGet(url, ...)
+        end
+    end
+
+    print("[TravHub] Environment checks passed.")
+end
+
+-- ══════════════════════════════════════════
 --  SERVICES
 -- ══════════════════════════════════════════
 local Players          = game:GetService("Players")
@@ -55,8 +95,9 @@ local sfmt    = string.format
 local function Safe(fn,...) pcall(fn,...) end
 
 local function NewDraw(t,props)
-    local o = Drawing.new(t)
-    for k,v in pairs(props) do o[k]=v end
+    local ok, o = pcall(function() return Drawing.new(t) end)
+    if not ok or not o then warn("[TravHub] Drawing.new failed for type: "..tostring(t)); return {} end
+    for k,v in pairs(props) do pcall(function() o[k]=v end) end
     return o
 end
 
@@ -384,11 +425,18 @@ Safe(PlayBoot)
 -- ══════════════════════════════════════════
 --  RAYFIELD LOADER
 -- ══════════════════════════════════════════
+-- Executor compatibility check
+if not loadstring then
+    warn("[TravHub] FATAL: loadstring is not available. Enable it in your executor settings.")
+    return
+end
+pcall(function() game:GetService("HttpService").HttpEnabled = true end)
 ShowInfo("Loading Rayfield...")
 local Rayfield = nil
 local _rfURLs = {
-    "https://sirius.menu/rayfield",
+    "https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua",
     "https://raw.githubusercontent.com/UI-Libraries/Rayfield/main/source.lua",
+    "https://sirius.menu/rayfield",
 }
 for i,url in ipairs(_rfURLs) do
     ShowInfo("Trying URL "..i)
