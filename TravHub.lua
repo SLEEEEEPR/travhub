@@ -561,192 +561,183 @@ local AILockDot    = NewDraw("Circle",{Visible=false,Filled=true,Color=Color3.fr
 
 -- ══════════════════════════════════════════
 --  CROSSHAIR DRAWINGS
---  Each style uses its OWN dedicated objects,
---  no sharing between styles to prevent bleedthrough.
+
 -- ══════════════════════════════════════════
--- Plus / T-Shape / KovaaK
-local CH_top   = NewDraw("Line",  {Visible=false,Thickness=2,Color=Color3.new(1,1,1)})
-local CH_bot   = NewDraw("Line",  {Visible=false,Thickness=2,Color=Color3.new(1,1,1)})
-local CH_left  = NewDraw("Line",  {Visible=false,Thickness=2,Color=Color3.new(1,1,1)})
-local CH_right = NewDraw("Line",  {Visible=false,Thickness=2,Color=Color3.new(1,1,1)})
--- Tick marks for KovaaK
-local CH_tk = {}; for i=1,4 do CH_tk[i]=NewDraw("Line",{Visible=false,Thickness=1.5,Color=Color3.new(1,1,1)}) end
--- X style (4 diagonal lines)
-local CH_X = {}; for i=1,4 do CH_X[i]=NewDraw("Line",{Visible=false,Thickness=2,Color=Color3.new(1,1,1)}) end
--- Dot
-local CH_dot   = NewDraw("Circle",{Visible=false,Filled=true,Radius=2,NumSides=12,Thickness=0,Color=Color3.new(1,1,1)})
--- Circle ring
-local CH_ring  = NewDraw("Circle",{Visible=false,Thickness=1.5,Filled=false,Radius=10,NumSides=48,Color=Color3.new(1,1,1)})
--- Sniper (4 full-screen lines)
-local CH_SN = {}; for i=1,4 do CH_SN[i]=NewDraw("Line",{Visible=false,Thickness=1,Color=Color3.new(1,1,1)}) end
-local CH_SN_ring = NewDraw("Circle",{Visible=false,Thickness=1,Filled=false,Radius=10,NumSides=48,Color=Color3.new(1,1,1)})
-local CH_SN_dot  = NewDraw("Circle",{Visible=false,Filled=true,Radius=2,NumSides=12,Thickness=0,Color=Color3.new(1,1,1)})
--- Bracket (8 corner lines)
-local CH_BR = {}; for i=1,8 do CH_BR[i]=NewDraw("Line",{Visible=false,Thickness=2,Color=Color3.new(1,1,1)}) end
-local CH_BR_dot = NewDraw("Circle",{Visible=false,Filled=true,Radius=2,NumSides=12,Thickness=0,Color=Color3.new(1,1,1)})
--- Diamond (4 lines)
-local CH_DM = {}; for i=1,4 do CH_DM[i]=NewDraw("Line",{Visible=false,Thickness=1.5,Color=Color3.new(1,1,1)}) end
-local CH_DM_dot = NewDraw("Circle",{Visible=false,Filled=true,Radius=2,NumSides=12,Thickness=0,Color=Color3.new(1,1,1)})
--- Happy Face (2 eyes + 6 smile lines)
-local CH_EYE1  = NewDraw("Circle",{Visible=false,Filled=true,Radius=2,NumSides=12,Thickness=0,Color=Color3.new(1,1,1)})
-local CH_EYE2  = NewDraw("Circle",{Visible=false,Filled=true,Radius=2,NumSides=12,Thickness=0,Color=Color3.new(1,1,1)})
-local CH_SM = {}; for i=1,6 do CH_SM[i]=NewDraw("Line",{Visible=false,Thickness=1.5,Color=Color3.new(1,1,1)}) end
-
-local _allCH = {
-    CH_top, CH_bot, CH_left, CH_right, CH_dot, CH_ring,
-    CH_SN_ring, CH_SN_dot,
-    CH_BR_dot, CH_DM_dot, CH_EYE1, CH_EYE2,
+--  CROSSHAIR DRAWINGS
+--  Shared pool — hide all each frame, draw only active style.
+--  Wrapped in pcall so a Drawing API hiccup never silently kills it.
+-- ══════════════════════════════════════════
+local _CHPool = {
+    lines  = {},
+    circles= {},
 }
-for _,t in ipairs({CH_tk,CH_X,CH_SN,CH_BR,CH_DM,CH_SM}) do for _,o in ipairs(t) do tinsert(_allCH,o) end end
+for i=1,12 do _CHPool.lines[i]  = NewDraw("Line",  {Visible=false,Thickness=2,Color=Color3.new(1,1,1)}) end
+for i=1,4  do _CHPool.circles[i]= NewDraw("Circle",{Visible=false,Filled=true,Radius=3,NumSides=16,Thickness=0,Color=Color3.new(1,1,1)}) end
+-- one ring for Circle/Sniper styles
+local _CHRing = NewDraw("Circle",{Visible=false,Thickness=1.5,Filled=false,NumSides=64,Radius=10,Color=Color3.new(1,1,1)})
 
-local function HideAllCrosshair() for _,o in ipairs(_allCH) do o.Visible=false end end
+local function _HideCH()
+    for _,l in ipairs(_CHPool.lines)   do l.Visible=false end
+    for _,c in ipairs(_CHPool.circles) do c.Visible=false end
+    _CHRing.Visible=false
+end
 
-local _prevStyle = ""
-local _chAngle   = 0
+local _prevCHStyle=""
+local _chAngle=0
+local _chFirstDraw=true
 
 local function UpdateCrosshair(dt)
     if not S.CrosshairEnabled then
-        if _prevStyle~="" then HideAllCrosshair(); _prevStyle="" end
+        if _prevCHStyle~="" then _HideCH(); _prevCHStyle="" end
         return
     end
-    local style = S.CrosshairStyle
-    -- On style change, hide everything first to prevent bleedthrough
-    if style~=_prevStyle then HideAllCrosshair(); _prevStyle=style; _chAngle=0 end
-    if S.CrosshairSpin then _chAngle=(_chAngle+mrad(S.CrosshairSpinSpeed)*dt)%(pi*2) end
 
-    local cx   = VP_CX
-    local cy   = VP_CY
-    local col  = S.CrosshairRainbow and RainbowHSV(0.6) or S.CrosshairColor
-    local th   = S.CrosshairThick
-    local op   = S.CrosshairOpacity
-    local gap  = S.CrosshairGap
-    local sz   = S.CrosshairSize
-    local ca   = mcos(_chAngle)
-    local sa   = msin(_chAngle)
+    local ok,err=pcall(function()
+        local style=S.CrosshairStyle
+        if style~=_prevCHStyle then _HideCH(); _prevCHStyle=style; _chAngle=0 end
+        if S.CrosshairSpin then _chAngle=(_chAngle+mrad(S.CrosshairSpinSpeed)*dt)%(pi*2) end
 
-    -- Rotate offset helper
-    local function R(ox,oy)
-        return Vector2.new(cx+ox*ca-oy*sa, cy+ox*sa+oy*ca)
-    end
-    -- Set a line with rotated offsets
-    local function SetLine(d,x1,y1,x2,y2)
-        d.From=R(x1,y1); d.To=R(x2,y2)
-        d.Color=col; d.Thickness=th; d.Transparency=op; d.Visible=true
-    end
-    local function SetDot(d,ox,oy,r)
-        d.Position=R(ox,oy); d.Color=col
-        d.Radius=r or 2; d.Transparency=op; d.Visible=true
-    end
+        local cx  = VP_CX
+        local cy  = VP_CY
+        local col = S.CrosshairRainbow and RainbowHSV(0.6) or S.CrosshairColor
+        local th  = mmax(S.CrosshairThick,1)
+        local op  = mclamp(S.CrosshairOpacity,0,1)
+        local gap = S.CrosshairGap
+        local sz  = S.CrosshairSize
+        local ca  = mcos(_chAngle)
+        local sa  = msin(_chAngle)
+        local L   = _CHPool.lines
+        local C   = _CHPool.circles
 
-    if style=="Plus" then
-        SetLine(CH_top,   0,-gap,  0,-(gap+sz))
-        SetLine(CH_bot,   0, gap,  0,  gap+sz)
-        SetLine(CH_left, -gap,0, -(gap+sz),0)
-        SetLine(CH_right,  gap,0,  gap+sz, 0)
-        SetDot(CH_dot,0,0)
-
-    elseif style=="X" then
-        -- 4 diagonal arms at 45° offset from rotation
-        local a45 = _chAngle + pi/4
-        local c45,s45 = mcos(a45),msin(a45)
-        local function R45(ox,oy) return Vector2.new(cx+ox*c45-oy*s45,cy+ox*s45+oy*c45) end
-        local function SL45(d,x1,y1,x2,y2)
-            d.From=R45(x1,y1); d.To=R45(x2,y2)
-            d.Color=col; d.Thickness=th; d.Transparency=op; d.Visible=true
+        -- Rotate an offset around centre
+        local function R(ox,oy)
+            return Vector2.new(cx+ox*ca-oy*sa, cy+ox*sa+oy*ca)
         end
-        SL45(CH_X[1], 0,-gap,  0,-(gap+sz))
-        SL45(CH_X[2], 0, gap,  0,  gap+sz)
-        SL45(CH_X[3],-gap,0, -(gap+sz),0)
-        SL45(CH_X[4], gap,0,  gap+sz, 0)
-        SetDot(CH_dot,0,0)
-
-    elseif style=="Dot" then
-        SetDot(CH_dot,0,0,mclamp(th+1,2,7))
-
-    elseif style=="Circle" then
-        CH_ring.Position=Vector2.new(cx,cy); CH_ring.Color=col
-        CH_ring.Radius=gap+sz*0.5; CH_ring.Thickness=th
-        CH_ring.Transparency=op; CH_ring.Visible=true
-        SetDot(CH_dot,0,0)
-
-    elseif style=="T-Shape" then
-        SetLine(CH_top,  0,-gap,  0,-(gap+sz))
-        SetLine(CH_left,-gap,0, -(gap+sz),0)
-        SetLine(CH_right, gap,0,  gap+sz, 0)
-        SetDot(CH_dot,0,0)
-
-    elseif style=="KovaaK" then
-        SetLine(CH_top,  0,-gap,  0,-(gap+sz))
-        SetLine(CH_bot,  0, gap,  0,  gap+sz)
-        SetLine(CH_left,-gap,0, -(gap+sz),0)
-        SetLine(CH_right, gap,0,  gap+sz, 0)
-        local tOff=gap+sz+4; local tLen=5
-        local function SetTk(d,x1,y1,x2,y2)
+        local function SetLine(d,x1,y1,x2,y2)
             d.From=R(x1,y1); d.To=R(x2,y2)
-            d.Color=col; d.Thickness=1.5; d.Transparency=op; d.Visible=true
-        end
-        SetTk(CH_tk[1], 0,-(tOff), 0,-(tOff+tLen))
-        SetTk(CH_tk[2], 0,  tOff,  0,  tOff+tLen)
-        SetTk(CH_tk[3],-(tOff),0, -(tOff+tLen),0)
-        SetTk(CH_tk[4],  tOff, 0,  tOff+tLen,  0)
-        SetDot(CH_dot,0,0)
-
-    elseif style=="Sniper" then
-        local vpX,vpY = VP.X, VP.Y
-        local snOp = mclamp(op+0.28,0,1)
-        CH_SN[1].From=Vector2.new(0,cy);        CH_SN[1].To=Vector2.new(cx-gap,cy)
-        CH_SN[2].From=Vector2.new(cx+gap,cy);   CH_SN[2].To=Vector2.new(vpX,cy)
-        CH_SN[3].From=Vector2.new(cx,0);         CH_SN[3].To=Vector2.new(cx,cy-gap)
-        CH_SN[4].From=Vector2.new(cx,cy+gap);   CH_SN[4].To=Vector2.new(cx,vpY)
-        for _,l in ipairs(CH_SN) do l.Color=col; l.Thickness=1; l.Transparency=snOp; l.Visible=true end
-        CH_SN_ring.Position=Vector2.new(cx,cy); CH_SN_ring.Color=col
-        CH_SN_ring.Radius=mmax(gap,6); CH_SN_ring.Thickness=1; CH_SN_ring.Transparency=op; CH_SN_ring.Visible=true
-        CH_SN_dot.Position=Vector2.new(cx,cy); CH_SN_dot.Color=col
-        CH_SN_dot.Radius=2; CH_SN_dot.Transparency=op; CH_SN_dot.Visible=true
-
-    elseif style=="Diamond" then
-        local r = sz+gap
-        local top=R(0,-r); local rgt=R(r,0); local bot=R(0,r); local lft=R(-r,0)
-        local function SetDM(d,f,t2)
-            d.From=f; d.To=t2; d.Color=col; d.Thickness=th; d.Transparency=op; d.Visible=true
-        end
-        SetDM(CH_DM[1],top,rgt); SetDM(CH_DM[2],rgt,bot)
-        SetDM(CH_DM[3],bot,lft); SetDM(CH_DM[4],lft,top)
-        SetDot(CH_DM_dot,0,0)
-
-    elseif style=="Bracket" then
-        local a2 = mmax(mfloor(sz*0.45),4)
-        local x1=cx-gap-sz; local x2=cx+gap+sz
-        local y1=cy-gap-sz; local y2=cy+gap+sz
-        local function SB(d,fx,fy,tx,ty)
-            d.From=Vector2.new(fx,fy); d.To=Vector2.new(tx,ty)
             d.Color=col; d.Thickness=th; d.Transparency=op; d.Visible=true
         end
-        SB(CH_BR[1],x1,y1,x1+a2,y1); SB(CH_BR[2],x1,y1,x1,y1+a2)
-        SB(CH_BR[3],x2,y1,x2-a2,y1); SB(CH_BR[4],x2,y1,x2,y1+a2)
-        SB(CH_BR[5],x1,y2,x1+a2,y2); SB(CH_BR[6],x1,y2,x1,y2-a2)
-        SB(CH_BR[7],x2,y2,x2-a2,y2); SB(CH_BR[8],x2,y2,x2,y2-a2)
-        CH_BR_dot.Position=Vector2.new(cx,cy); CH_BR_dot.Color=col
-        CH_BR_dot.Radius=2; CH_BR_dot.Transparency=op; CH_BR_dot.Visible=true
+        local function SetDot(d,ox,oy,r)
+            d.Position=R(ox,oy); d.Color=col
+            d.Filled=true; d.Radius=r or mmax(th,2); d.Transparency=op; d.Visible=true
+        end
 
-    elseif style=="Happy Face" then
-        local fR = sz+gap
-        CH_EYE1.Position=Vector2.new(cx-fR*0.35,cy-fR*0.3); CH_EYE1.Radius=mmax(th,2)
-        CH_EYE1.Color=col; CH_EYE1.Transparency=op; CH_EYE1.Visible=true
-        CH_EYE2.Position=Vector2.new(cx+fR*0.35,cy-fR*0.3); CH_EYE2.Radius=mmax(th,2)
-        CH_EYE2.Color=col; CH_EYE2.Transparency=op; CH_EYE2.Visible=true
-        local smR=fR*0.52; local smCY=cy+fR*0.12
-        local pts={}
-        for i=0,6 do
-            local ang=mrad(20)+mrad(140)/6*i
-            pts[i+1]=Vector2.new(cx+mcos(ang)*smR, smCY+msin(ang)*smR)
+        _HideCH()  -- clear every frame so style changes are clean
+
+        if style=="Plus" then
+            SetLine(L[1], 0,-gap,    0,-(gap+sz))
+            SetLine(L[2], 0, gap,    0,  gap+sz)
+            SetLine(L[3],-gap,0,  -(gap+sz),0)
+            SetLine(L[4], gap,0,   gap+sz, 0)
+            SetDot(C[1],0,0)
+
+        elseif style=="X" then
+            local a45=_chAngle+pi/4; local c2=mcos(a45); local s2=msin(a45)
+            local function R45(ox,oy) return Vector2.new(cx+ox*c2-oy*s2,cy+ox*s2+oy*c2) end
+            local function SL45(d,x1,y1,x2,y2)
+                d.From=R45(x1,y1);d.To=R45(x2,y2)
+                d.Color=col;d.Thickness=th;d.Transparency=op;d.Visible=true
+            end
+            SL45(L[1], 0,-gap,  0,-(gap+sz))
+            SL45(L[2], 0, gap,  0,  gap+sz)
+            SL45(L[3],-gap,0,-(gap+sz),0)
+            SL45(L[4], gap,0,  gap+sz, 0)
+            SetDot(C[1],0,0)
+
+        elseif style=="Dot" then
+            SetDot(C[1],0,0,mclamp(sz*0.35,2,12))
+
+        elseif style=="Circle" then
+            _CHRing.Position=Vector2.new(cx,cy); _CHRing.Color=col
+            _CHRing.Radius=mmax(gap+sz*0.5,4); _CHRing.Thickness=th
+            _CHRing.Transparency=op; _CHRing.Visible=true
+            SetDot(C[1],0,0)
+
+        elseif style=="T-Shape" then
+            SetLine(L[1], 0,-gap,  0,-(gap+sz))
+            SetLine(L[2],-gap,0,-(gap+sz),0)
+            SetLine(L[3], gap,0,  gap+sz, 0)
+            SetDot(C[1],0,0)
+
+        elseif style=="KovaaK" then
+            SetLine(L[1], 0,-gap,  0,-(gap+sz))
+            SetLine(L[2], 0, gap,  0,  gap+sz)
+            SetLine(L[3],-gap,0,-(gap+sz),0)
+            SetLine(L[4], gap,0,  gap+sz, 0)
+            local tOff=gap+sz+4; local tLen=5; local ot=th; th=mmax(th-0.5,1)
+            SetLine(L[5], 0,-(tOff),  0,-(tOff+tLen))
+            SetLine(L[6], 0,  tOff,   0,  tOff+tLen)
+            SetLine(L[7],-(tOff),0,-(tOff+tLen),0)
+            SetLine(L[8],  tOff, 0,  tOff+tLen, 0)
+            th=ot; SetDot(C[1],0,0)
+
+        elseif style=="Sniper" then
+            local vpX,vpY=VP.X,VP.Y; local snOp=mclamp(op+0.28,0,1)
+            L[1].From=Vector2.new(0,cy);        L[1].To=Vector2.new(cx-gap,cy)
+            L[2].From=Vector2.new(cx+gap,cy);   L[2].To=Vector2.new(vpX,cy)
+            L[3].From=Vector2.new(cx,0);         L[3].To=Vector2.new(cx,cy-gap)
+            L[4].From=Vector2.new(cx,cy+gap);   L[4].To=Vector2.new(cx,vpY)
+            for i=1,4 do L[i].Color=col;L[i].Thickness=1;L[i].Transparency=snOp;L[i].Visible=true end
+            _CHRing.Position=Vector2.new(cx,cy); _CHRing.Color=col
+            _CHRing.Radius=mmax(gap,6); _CHRing.Thickness=1
+            _CHRing.Transparency=op; _CHRing.Visible=true
+            C[1].Position=Vector2.new(cx,cy); C[1].Radius=2
+            C[1].Color=col; C[1].Transparency=op; C[1].Visible=true
+
+        elseif style=="Diamond" then
+            local r=sz+gap
+            local ptT=R(0,-r);local ptR=R(r,0);local ptB=R(0,r);local ptL=R(-r,0)
+            L[1].From=ptT;L[1].To=ptR;L[1].Color=col;L[1].Thickness=th;L[1].Transparency=op;L[1].Visible=true
+            L[2].From=ptR;L[2].To=ptB;L[2].Color=col;L[2].Thickness=th;L[2].Transparency=op;L[2].Visible=true
+            L[3].From=ptB;L[3].To=ptL;L[3].Color=col;L[3].Thickness=th;L[3].Transparency=op;L[3].Visible=true
+            L[4].From=ptL;L[4].To=ptT;L[4].Color=col;L[4].Thickness=th;L[4].Transparency=op;L[4].Visible=true
+            SetDot(C[1],0,0)
+
+        elseif style=="Bracket" then
+            local a2=mmax(mfloor(sz*0.45),4)
+            local x1=cx-gap-sz;local x2=cx+gap+sz;local y1=cy-gap-sz;local y2=cy+gap+sz
+            L[1].From=Vector2.new(x1,y1);L[1].To=Vector2.new(x1+a2,y1)
+            L[2].From=Vector2.new(x1,y1);L[2].To=Vector2.new(x1,y1+a2)
+            L[3].From=Vector2.new(x2,y1);L[3].To=Vector2.new(x2-a2,y1)
+            L[4].From=Vector2.new(x2,y1);L[4].To=Vector2.new(x2,y1+a2)
+            L[5].From=Vector2.new(x1,y2);L[5].To=Vector2.new(x1+a2,y2)
+            L[6].From=Vector2.new(x1,y2);L[6].To=Vector2.new(x1,y2-a2)
+            L[7].From=Vector2.new(x2,y2);L[7].To=Vector2.new(x2-a2,y2)
+            L[8].From=Vector2.new(x2,y2);L[8].To=Vector2.new(x2,y2-a2)
+            for i=1,8 do L[i].Color=col;L[i].Thickness=th;L[i].Transparency=op;L[i].Visible=true end
+            C[1].Position=Vector2.new(cx,cy);C[1].Radius=2;C[1].Color=col;C[1].Transparency=op;C[1].Visible=true
+
+        elseif style=="Happy Face" then
+            local fR=sz+gap
+            C[1].Position=Vector2.new(cx-fR*0.35,cy-fR*0.3);C[1].Radius=mmax(th,2)
+            C[1].Color=col;C[1].Transparency=op;C[1].Visible=true
+            C[2].Position=Vector2.new(cx+fR*0.35,cy-fR*0.3);C[2].Radius=mmax(th,2)
+            C[2].Color=col;C[2].Transparency=op;C[2].Visible=true
+            local smR=fR*0.52; local smCY=cy+fR*0.12; local pts={}
+            for i=0,6 do
+                local ang=mrad(20)+mrad(140)/6*i
+                pts[i+1]=Vector2.new(cx+mcos(ang)*smR,smCY+msin(ang)*smR)
+            end
+            for i=1,6 do
+                L[i].From=pts[i];L[i].To=pts[i+1]
+                L[i].Color=col;L[i].Thickness=th;L[i].Transparency=op;L[i].Visible=true
+            end
         end
-        for i=1,6 do
-            CH_SM[i].From=pts[i]; CH_SM[i].To=pts[i+1]
-            CH_SM[i].Color=col; CH_SM[i].Thickness=th; CH_SM[i].Transparency=op; CH_SM[i].Visible=true
+
+        -- First draw confirmation
+        if _chFirstDraw then
+            _chFirstDraw=false
+            ShowInfo("Crosshair drawing OK — style: "..style)
         end
+    end)
+
+    if not ok then
+        warn("[TravHub Crosshair Error] "..tostring(err))
+        _HideCH()
     end
 end
+
+local function HideAllCrosshair() _HideCH() end  -- kept for toggle callback compatibility
 
 -- ══════════════════════════════════════════
 --  HITMARKER
