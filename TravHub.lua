@@ -78,7 +78,7 @@ local AME = {
 --  KEYAUTH CONFIG
 -- ══════════════════════════════════════════
 local KA_NAME    = "Mermorz's Application"
-local KA_OWNERID = "hIIkGaxr8u"
+local KA_OWNERID = "hLIkGaxr8u"
 local KA_SECRET  = "7f2253965f73618809126cba1ff66693c04f82888535c82709f9c17c9ceafdc1"
 local KA_VER     = "1.0"
 local KA_URL     = "https://keyauth.win/api/1.2/"
@@ -213,9 +213,9 @@ do
     _tb.ZIndex=4; _tb.Visible=false; _tb.Parent=_panel
     local _tbS=Instance.new("UIStroke"); _tbS.Color=Color3.fromRGB(160,80,255); _tbS.Thickness=1.5; _tbS.Parent=_tb
 
-    -- Get Key button
-    local _gkBtn=Instance.new("TextButton"); _gkBtn.Size=UDim2.new(0,110,0,26)
-    _gkBtn.Position=UDim2.new(0.5,-55,0,175); _gkBtn.BackgroundColor3=Color3.fromRGB(80,30,140)
+    -- Get Key button (left)
+    local _gkBtn=Instance.new("TextButton"); _gkBtn.Size=UDim2.new(0,110,0,28)
+    _gkBtn.Position=UDim2.new(0.5,-118,0,175); _gkBtn.BackgroundColor3=Color3.fromRGB(80,30,140)
     _gkBtn.BackgroundTransparency=0.1; _gkBtn.BorderSizePixel=0
     _gkBtn.Text="Get Key"; _gkBtn.TextColor3=Color3.fromRGB(220,180,255)
     _gkBtn.Font=Enum.Font.GothamBold; _gkBtn.TextSize=13; _gkBtn.ZIndex=5; _gkBtn.Parent=_panel
@@ -227,6 +227,20 @@ do
     end)
     _gkBtn.MouseEnter:Connect(function() _gkBtn.BackgroundColor3=Color3.fromRGB(120,50,200) end)
     _gkBtn.MouseLeave:Connect(function() _gkBtn.BackgroundColor3=Color3.fromRGB(80,30,140) end)
+
+    -- Enter Key button (right)
+    local _ekBtn=Instance.new("TextButton"); _ekBtn.Size=UDim2.new(0,110,0,28)
+    _ekBtn.Position=UDim2.new(0.5,8,0,175); _ekBtn.BackgroundColor3=Color3.fromRGB(40,120,60)
+    _ekBtn.BackgroundTransparency=0.1; _ekBtn.BorderSizePixel=0
+    _ekBtn.Text="Enter Key"; _ekBtn.TextColor3=Color3.fromRGB(180,255,200)
+    _ekBtn.Font=Enum.Font.GothamBold; _ekBtn.TextSize=13; _ekBtn.ZIndex=5; _ekBtn.Parent=_panel
+    local _ekS=Instance.new("UIStroke"); _ekS.Color=Color3.fromRGB(80,200,120); _ekS.Thickness=1.5; _ekS.Parent=_ekBtn
+    local _ekCorner=Instance.new("UICorner"); _ekCorner.CornerRadius=UDim.new(0,5); _ekCorner.Parent=_ekBtn
+    _ekBtn.MouseButton1Click:Connect(function()
+        if not _busy then _validate(_tb.Text) end
+    end)
+    _ekBtn.MouseEnter:Connect(function() _ekBtn.BackgroundColor3=Color3.fromRGB(60,160,80) end)
+    _ekBtn.MouseLeave:Connect(function() _ekBtn.BackgroundColor3=Color3.fromRGB(40,120,60) end)
 
     local _hint=_lbl("Please wait...",_panel.Size.Y.Offset-26,11,Color3.fromRGB(120,100,160))
     _hint.Font=Enum.Font.Gotham
