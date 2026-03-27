@@ -74,277 +74,7 @@ local AME = {
     glow   = Color3.fromRGB(200,130,255),
 }
 
--- ══════════════════════════════════════════
---  KEYAUTH CONFIG
--- ══════════════════════════════════════════
-local KA_NAME    = "Mermorz's Application"
-local KA_OWNERID = "hLIkGaxr8u"
-local KA_SECRET  = "7f2253965f73618809126cba1ff66693c04f82888535c82709f9c17c9ceafdc1"
-local KA_VER     = "1.0"
-local KA_URL     = "https://keyauth.win/api/1.2/"
-
--- ══════════════════════════════════════════
---  HTTP WRAPPER  (Xeno: global request())
--- ══════════════════════════════════════════
-local function _kaRequest(opts)
-    local fn = nil
-    if type(request)=="function"                              then fn=request
-    elseif syn and type(syn.request)=="function"              then fn=syn.request
-    elseif type(http_request)=="function"                     then fn=http_request
-    elseif http and type(http.request)=="function"            then fn=http.request
-    end
-    if not fn then return nil,"No HTTP function found" end
-    local ok,res = pcall(fn,opts)
-    if not ok then return nil,tostring(res) end
-    return res,nil
-end
-
--- ══════════════════════════════════════════
---  KEYAUTH API
--- ══════════════════════════════════════════
-local _kaSession = nil
-
-local function _kaInit()
-    local guid = HttpService:GenerateGUID(false):sub(1,32)
-    local body = ("type=init&ver=%s&hash=&enckey=%s&name=%s&ownerid=%s&secret=%s"):format(
-        KA_VER,
-        HttpService:UrlEncode(guid),
-        HttpService:UrlEncode(KA_NAME),
-        HttpService:UrlEncode(KA_OWNERID),
-        HttpService:UrlEncode(KA_SECRET)
-    )
-    local res,err = _kaRequest({
-        Url=KA_URL, Method="POST",
-        Headers={["Content-Type"]="application/x-www-form-urlencoded"},
-        Body=body,
-    })
-    if err or not res then return false,"Network error: "..(err or "no response") end
-    local ok,data = pcall(function() return HttpService:JSONDecode(res.Body) end)
-    if not ok or not data then return false,"Bad init response" end
-    if not data.success then return false,tostring(data.message or "Init failed") end
-    _kaSession = data.sessionid
-    return true,"OK"
-end
-
-local function _kaLicense(key)
-    if not _kaSession then return false,"Session not initialised" end
-    local hwid = tostring(LocalPlayer.UserId)
-    local body = ("type=license&key=%s&hwid=%s&sessionid=%s&name=%s&ownerid=%s"):format(
-        HttpService:UrlEncode(key),
-        HttpService:UrlEncode(hwid),
-        HttpService:UrlEncode(_kaSession),
-        HttpService:UrlEncode(KA_NAME),
-        HttpService:UrlEncode(KA_OWNERID)
-    )
-    local res,err = _kaRequest({
-        Url=KA_URL, Method="POST",
-        Headers={["Content-Type"]="application/x-www-form-urlencoded"},
-        Body=body,
-    })
-    if err or not res then return false,"Network error: "..(err or "no response") end
-    local ok,data = pcall(function() return HttpService:JSONDecode(res.Body) end)
-    if not ok or not data then return false,"Bad license response" end
-    return data.success==true, tostring(data.message or (data.success and "Accepted" or "Invalid key"))
-end
-
--- ══════════════════════════════════════════
---  KEY GATE UI
--- ══════════════════════════════════════════
-local _keyPassed = false
-
-do
-    local _saved = ""
-    pcall(function()
-        if type(isfile)=="function" and isfile("TravHub_v39_Key.txt") then
-            _saved = readfile("TravHub_v39_Key.txt"):gsub("%s+","")
-        end
-    end)
-
-    local _gui = Instance.new("ScreenGui")
-    _gui.Name="TravHubKeyGate"; _gui.ResetOnSpawn=false
-    _gui.DisplayOrder=9999; _gui.ZIndexBehavior=Enum.ZIndexBehavior.Global
-    pcall(function() _gui.Parent=LocalPlayer.PlayerGui end)
-    if not _gui.Parent then pcall(function() _gui.Parent=LocalPlayer:WaitForChild("PlayerGui",5) end) end
-
-    local _overlay = Instance.new("Frame")
-    _overlay.Size=UDim2.new(1,0,1,0); _overlay.BackgroundColor3=Color3.new(0,0,0)
-    _overlay.BackgroundTransparency=0.45; _overlay.BorderSizePixel=0; _overlay.ZIndex=1
-    _overlay.Parent=_gui
-
-    local _panel = Instance.new("Frame")
-    _panel.Size=UDim2.new(0,490,0,240); _panel.Position=UDim2.new(0.5,-245,0.5,-120)
-    _panel.BackgroundColor3=Color3.fromRGB(12,4,28); _panel.BackgroundTransparency=0.05
-    _panel.BorderSizePixel=0; _panel.ZIndex=2; _panel.Active=true; _panel.Parent=_gui
-
-    local _stroke = Instance.new("UIStroke")
-    _stroke.Color=Color3.fromRGB(160,80,255); _stroke.Thickness=2; _stroke.Parent=_panel
-
-    local function _mkC(xA,yA,w,h)
-        local f=Instance.new("Frame"); f.Size=UDim2.new(0,w,0,h)
-        f.Position=UDim2.new(xA,0,yA,0); f.BackgroundColor3=Color3.fromRGB(200,130,255)
-        f.BorderSizePixel=0; f.ZIndex=3; f.Parent=_panel
-    end
-    _mkC(0,0,22,2);_mkC(0,0,2,22);_mkC(1,0,-22,2);_mkC(1,0,-2,22)
-    _mkC(0,1,22,-2);_mkC(0,1,2,-22);_mkC(1,1,-22,-2);_mkC(1,1,-2,-22)
-
-    local function _lbl(txt,y,sz,col,vis)
-        local l=Instance.new("TextLabel"); l.Size=UDim2.new(1,0,0,sz+4)
-        l.Position=UDim2.new(0,0,0,y); l.BackgroundTransparency=1; l.Text=txt
-        l.TextColor3=col; l.Font=Enum.Font.GothamBold; l.TextSize=sz
-        l.ZIndex=3; l.Visible=vis~=false; l.Parent=_panel; return l
-    end
-    _lbl("TRAV HUB",8,36,Color3.fromRGB(200,130,255))
-    _lbl("Project Delta  ·  Crystal Edition  ·  v3.9",54,12,Color3.fromRGB(160,130,200))
-
-    local _sep=Instance.new("Frame"); _sep.Size=UDim2.new(1,-48,0,1); _sep.Position=UDim2.new(0,24,0,80)
-    _sep.BackgroundColor3=Color3.fromRGB(100,60,160); _sep.BorderSizePixel=0; _sep.ZIndex=3; _sep.Parent=_panel
-
-    local _step=_lbl("⟳  Connecting to KeyAuth...",88,12,Color3.fromRGB(160,130,200))
-    _step.Font=Enum.Font.Gotham
-
-    local _prmpt=_lbl("Enter your license key:",108,12,Color3.fromRGB(220,200,255),false)
-    _prmpt.Font=Enum.Font.Gotham
-
-    local _tb=Instance.new("TextBox"); _tb.Size=UDim2.new(1,-80,0,34)
-    _tb.Position=UDim2.new(0,40,0,130); _tb.BackgroundColor3=Color3.fromRGB(28,8,58)
-    _tb.BackgroundTransparency=0.1; _tb.BorderSizePixel=0; _tb.TextColor3=Color3.fromRGB(255,255,255)
-    _tb.PlaceholderText=""; _tb.Font=Enum.Font.Gotham; _tb.TextSize=14
-    _tb.ClearTextOnFocus=false; _tb.TextTruncate=Enum.TextTruncate.AtEnd
-    _tb.ZIndex=4; _tb.Visible=false; _tb.Parent=_panel
-    local _tbS=Instance.new("UIStroke"); _tbS.Color=Color3.fromRGB(160,80,255); _tbS.Thickness=1.5; _tbS.Parent=_tb
-
-    -- Get Key button (left)
-    local _gkBtn=Instance.new("TextButton"); _gkBtn.Size=UDim2.new(0,110,0,28)
-    _gkBtn.Position=UDim2.new(0.5,-118,0,175); _gkBtn.BackgroundColor3=Color3.fromRGB(80,30,140)
-    _gkBtn.BackgroundTransparency=0.1; _gkBtn.BorderSizePixel=0
-    _gkBtn.Text="Get Key"; _gkBtn.TextColor3=Color3.fromRGB(220,180,255)
-    _gkBtn.Font=Enum.Font.GothamBold; _gkBtn.TextSize=13; _gkBtn.ZIndex=5; _gkBtn.Parent=_panel
-    local _gkS=Instance.new("UIStroke"); _gkS.Color=Color3.fromRGB(160,80,255); _gkS.Thickness=1.5; _gkS.Parent=_gkBtn
-    local _gkCorner=Instance.new("UICorner"); _gkCorner.CornerRadius=UDim.new(0,5); _gkCorner.Parent=_gkBtn
-    _gkBtn.MouseButton1Click:Connect(function()
-        pcall(function() game:GetService("GuiService"):OpenBrowserWindow("https://discord.gg/W2jQ87my") end)
-        pcall(function() if type(setclipboard)=="function" then setclipboard("https://discord.gg/W2jQ87my") end end)
-    end)
-    _gkBtn.MouseEnter:Connect(function() _gkBtn.BackgroundColor3=Color3.fromRGB(120,50,200) end)
-    _gkBtn.MouseLeave:Connect(function() _gkBtn.BackgroundColor3=Color3.fromRGB(80,30,140) end)
-
-    -- Enter Key button (right)
-    local _ekBtn=Instance.new("TextButton"); _ekBtn.Size=UDim2.new(0,110,0,28)
-    _ekBtn.Position=UDim2.new(0.5,8,0,175); _ekBtn.BackgroundColor3=Color3.fromRGB(40,120,60)
-    _ekBtn.BackgroundTransparency=0.1; _ekBtn.BorderSizePixel=0
-    _ekBtn.Text="Enter Key"; _ekBtn.TextColor3=Color3.fromRGB(180,255,200)
-    _ekBtn.Font=Enum.Font.GothamBold; _ekBtn.TextSize=13; _ekBtn.ZIndex=5; _ekBtn.Parent=_panel
-    local _ekS=Instance.new("UIStroke"); _ekS.Color=Color3.fromRGB(80,200,120); _ekS.Thickness=1.5; _ekS.Parent=_ekBtn
-    local _ekCorner=Instance.new("UICorner"); _ekCorner.CornerRadius=UDim.new(0,5); _ekCorner.Parent=_ekBtn
-    _ekBtn.MouseButton1Click:Connect(function()
-        if not _busy then _validate(_tb.Text) end
-    end)
-    _ekBtn.MouseEnter:Connect(function() _ekBtn.BackgroundColor3=Color3.fromRGB(60,160,80) end)
-    _ekBtn.MouseLeave:Connect(function() _ekBtn.BackgroundColor3=Color3.fromRGB(40,120,60) end)
-
-    local _hint=_lbl("Please wait...",_panel.Size.Y.Offset-26,11,Color3.fromRGB(120,100,160))
-    _hint.Font=Enum.Font.Gotham
-
-    -- Drag
-    local _drag=Instance.new("Frame"); _drag.Size=UDim2.new(1,0,0,128)
-    _drag.Position=UDim2.new(0,0,0,0); _drag.BackgroundTransparency=1; _drag.ZIndex=5; _drag.Parent=_panel
-    local _dg,_ds,_dp=false,nil,nil
-    _drag.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then _dg=true;_ds=i.Position;_dp=_panel.Position end end)
-    _drag.InputEnded:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 then _dg=false end end)
-    UserInputService.InputChanged:Connect(function(i)
-        if _dg and i.UserInputType==Enum.UserInputType.MouseMovement then
-            local d=i.Position-_ds
-            _panel.Position=UDim2.new(_dp.X.Scale,_dp.X.Offset+d.X,_dp.Y.Scale,_dp.Y.Offset+d.Y)
-        end
-    end)
-
-    local _busy=false; local _attempts=0
-    local function _setHint(t,c) _hint.Text=t; _hint.TextColor3=c end
-    local function _fadeOut()
-        for i=0,10 do
-            local t=i/10
-            pcall(function() _overlay.BackgroundTransparency=0.45+t*0.55 end)
-            pcall(function() _panel.BackgroundTransparency=0.05+t*0.95 end)
-            task.wait(0.016)
-        end
-        pcall(function() _gui:Destroy() end)
-        _keyPassed=true
-    end
-
-    local function _showInput()
-        _step.Visible=false; _prmpt.Visible=true; _tb.Visible=true; _tb.TextEditable=true
-        task.wait(0.1); pcall(function() _tb:CaptureFocus() end)
-        _setHint("Type or paste your key, then press ENTER",Color3.fromRGB(120,100,160))
-    end
-
-    local function _validate(key)
-        local k=key:gsub("%s+","")
-        if _busy or #k<4 then return end
-        _busy=true; _tb.TextEditable=false
-        _tbS.Color=Color3.fromRGB(180,160,255)
-        _setHint("⟳  Checking key...",Color3.fromRGB(180,160,255))
-        task.spawn(function()
-            local ok,msg=_kaLicense(k)
-            if ok then
-                pcall(function() if type(writefile)=="function" then writefile("TravHub_v39_Key.txt",k) end end)
-                _tbS.Color=Color3.fromRGB(80,255,120)
-                _setHint("✦  Key accepted — loading hub...  ✦",Color3.fromRGB(80,255,120))
-                task.wait(0.8); _fadeOut()
-            else
-                _attempts+=1
-                _setHint(("✗  %s  (%d attempt%s)"):format(msg,_attempts,_attempts~=1 and "s" or ""),Color3.fromRGB(255,80,80))
-                _tbS.Color=Color3.fromRGB(255,80,80)
-                _tb.Text=""; _prmpt.Visible=true; _tb.Visible=true; _tb.TextEditable=true
-                _busy=false; task.wait(0.15); pcall(function() _tb:CaptureFocus() end)
-                task.wait(2.5)
-                if not _keyPassed then _tbS.Color=Color3.fromRGB(160,80,255); _setHint("Type or paste your key, then press ENTER",Color3.fromRGB(120,100,160)) end
-            end
-        end)
-    end
-
-    _tb.FocusLost:Connect(function(enter) if enter and not _busy then _validate(_tb.Text) end end)
-
-    -- Timeout guard — never hang forever
-    local _initDone=false
-    task.delay(12,function()
-        if not _initDone and not _keyPassed then
-            _step.Text="⚠ Connection slow — enter key manually"
-            _step.TextColor3=Color3.fromRGB(255,200,80)
-            _showInput()
-        end
-    end)
-
-    task.spawn(function()
-        ShowInfo("Connecting to KeyAuth...")
-        local initOk,initMsg=_kaInit()
-        _initDone=true
-        if not initOk then
-            ShowInfo("KeyAuth init failed: "..initMsg)
-            _step.Text="✗  "..initMsg; _step.TextColor3=Color3.fromRGB(255,100,100)
-            _setHint("Retrying...",Color3.fromRGB(255,150,80)); task.wait(3)
-            initOk,initMsg=_kaInit()
-            if not initOk then
-                ShowInfo("Retry failed — showing input")
-                _step.Text="⚠ Can't reach KeyAuth"; _step.TextColor3=Color3.fromRGB(255,120,0)
-                _setHint("Enter key manually (offline mode)",Color3.fromRGB(255,180,80))
-                _showInput(); return
-            end
-        end
-        _step.Text="✦  Connected"; _step.TextColor3=Color3.fromRGB(100,255,160)
-        ShowInfo("Connected. Checking saved key...")
-        task.wait(0.4)
-        if _saved~="" then
-            _setHint("⟳  Checking saved key...",Color3.fromRGB(180,160,255))
-            _validate(_saved)
-        else
-            _showInput()
-        end
-    end)
-
-    while not _keyPassed do task.wait(0.05) end
-end
-
-ShowInfo("Key gate passed. Loading hub...")
+ShowInfo("Loading hub...")
 
 -- ══════════════════════════════════════════
 --  FRAME TICK + VIEWPORT
@@ -590,9 +320,6 @@ local AILockDot    = NewDraw("Circle",{Visible=false,Filled=true,Color=Color3.fr
 
 -- ══════════════════════════════════════════
 --  CROSSHAIR DRAWINGS
-
--- ══════════════════════════════════════════
---  CROSSHAIR DRAWINGS
 --  Shared pool — hide all each frame, draw only active style.
 --  Wrapped in pcall so a Drawing API hiccup never silently kills it.
 -- ══════════════════════════════════════════
@@ -756,7 +483,7 @@ local function UpdateCrosshair(dt)
             end
         end
 
-                -- First draw confirmation
+        -- First draw confirmation
         if _chFirstDraw then
             _chFirstDraw=false
             ShowInfo("Crosshair drawing OK — style: "..style)
@@ -1182,7 +909,6 @@ local LOOT_BLACKLIST={
     LeftLowerLeg=true,RightLowerLeg=true,LeftFoot=true,RightFoot=true,
     Baseplate=true,Terrain=true,SpawnLocation=true,Sky=true,Sun=true,
     Part=true,UnionOperation=true,Decal=true,Texture=true,SpecialMesh=true,
-    -- Project Delta hitbox parts
     HeadTopHitBox=true,FaceHitBox=true,HeadHitBox=true,BodyHitBox=true,
     TorsoHitBox=true,ChestHitBox=true,ArmHitBox=true,LegHitBox=true,
     HandHitBox=true,FootHitBox=true,UpperTorsoHitBox=true,LowerTorsoHitBox=true,
@@ -1253,14 +979,13 @@ local function _LootRemove(inst)
     end
 end
 local function _LootBootstrap()
-    -- Batched bootstrap: scan top 2 levels only to avoid freeze
     local checked=0
     for _,child in ipairs(Workspace:GetChildren()) do
         _LootCheck(child); checked=checked+1
         if child:IsA("Folder") or child:IsA("Model") then
             for _,sub in ipairs(child:GetChildren()) do
                 _LootCheck(sub); checked=checked+1
-                if checked%200==0 then task.wait() end  -- yield every 200 items
+                if checked%200==0 then task.wait() end
             end
         end
     end
@@ -1281,7 +1006,6 @@ end
 local _lootWasEnabled=false
 local _lootFrameSkip=0
 local function UpdateLootESP(myRoot)
-    -- Throttle: only fully update every 4 frames to avoid stutter
     _lootFrameSkip=(_lootFrameSkip+1)%4
     if _lootFrameSkip~=0 and S.LootESPEnabled then return end
     if not S.LootESPEnabled then
@@ -1455,11 +1179,10 @@ Workspace.DescendantRemoving:Connect(function(d)
 end)
 
 -- ══════════════════════════════════════════
---  PLAYER AIMBOT  (Universal — Project Delta & Rivals)
+--  PLAYER AIMBOT
 -- ══════════════════════════════════════════
 local lockedTarget=nil; local lastTargetPos={}; local _prevLockedTarget=nil
 
--- Part priority list — tried in order when user-selected part isn't found
 local AIM_PARTS={"Head","UpperTorso","Torso","HumanoidRootPart","RootPart","LowerTorso"}
 
 local function FindAimPart(char)
@@ -1473,43 +1196,30 @@ local function FindAimPart(char)
     return char:FindFirstChildWhichIsA("BasePart")
 end
 
--- Universal alive check — handles Humanoid.Health, custom Attributes, and Values
 local function IsTargetAlive(player)
     local char=player.Character
     if not char then return false end
-
-    -- Standard Humanoid check
     local hum=char:FindFirstChildOfClass("Humanoid")
     if hum then
         if hum.Health<=0 then return false end
         if hum.Health==0 and hum.MaxHealth==0 then return false end
     end
-
-    -- Bool/Int "Dead" or "IsDead" value
     local dv=char:FindFirstChild("Dead") or char:FindFirstChild("IsDead")
     if dv then
         if dv:IsA("BoolValue") and dv.Value then return false end
         if (dv:IsA("IntValue") or dv:IsA("NumberValue")) and dv.Value~=0 then return false end
     end
-
-    -- Bool/Int "Alive" or "IsAlive" value
     local av=char:FindFirstChild("Alive") or char:FindFirstChild("IsAlive")
     if av then
         if av:IsA("BoolValue") and not av.Value then return false end
         if (av:IsA("IntValue") or av:IsA("NumberValue")) and av.Value==0 then return false end
     end
-
-    -- Attribute-based health (Rivals uses char Attributes for HP)
     local ok,hp=pcall(function() return char:GetAttribute("Health") or char:GetAttribute("HP") or char:GetAttribute("hp") end)
     if ok and type(hp)=="number" and hp<=0 then return false end
-
-    -- NumberValue/IntValue named Health or HP inside character
     local hpv=char:FindFirstChild("Health") or char:FindFirstChild("HP") or char:FindFirstChild("hp")
     if hpv and (hpv:IsA("NumberValue") or hpv:IsA("IntValue") or hpv:IsA("FloatValue")) then
         if hpv.Value<=0 then return false end
     end
-
-    -- If we found no Humanoid at all, still allow targeting (some games remove it)
     return true
 end
 
@@ -1596,6 +1306,7 @@ local function RunAimbot(camCF,dt)
     end
 end
 
+-- ══════════════════════════════════════════
 --  ZOOM
 -- ══════════════════════════════════════════
 local zoomTween=nil
@@ -1677,7 +1388,7 @@ local function UpdateZoom()
 end
 
 -- ══════════════════════════════════════════
---  NO RECOIL  (Heartbeat)
+--  NO RECOIL
 -- ══════════════════════════════════════════
 local lastCamCF=nil; local _nrJitter=0
 RunService.Heartbeat:Connect(function(dt)
@@ -1697,7 +1408,7 @@ RunService.Heartbeat:Connect(function(dt)
 end)
 
 -- ══════════════════════════════════════════
---  TRIGGERBOT  (Heartbeat)
+--  TRIGGERBOT
 -- ══════════════════════════════════════════
 local _trigAcc=0
 RunService.Heartbeat:Connect(function(dt)
@@ -1794,7 +1505,6 @@ end)
 -- ══════════════════════════════════════════
 --  RENDER LOOP
 -- ══════════════════════════════════════════
-
 RunService.RenderStepped:Connect(function(dt)
     _tick=tick()
     fpsFrames=fpsFrames+1; fpsElapsed=fpsElapsed+dt
@@ -1822,9 +1532,9 @@ RunService.RenderStepped:Connect(function(dt)
     if S.ShowPing then PingLabel.Text=sfmt("Ping: %d ms",pingVal); PingLabel.Visible=true else PingLabel.Visible=false end
 end)
 
--- ══════════════════════════════════════════════════════
+-- ══════════════════════════════════════════
 --  RAYFIELD TABS
--- ══════════════════════════════════════════════════════
+-- ══════════════════════════════════════════
 
 -- ── TAB 1: Player ESP ──────────────────────────────────
 local T1=Window:CreateTab("👁  Player ESP",4483362458)
@@ -2036,8 +1746,7 @@ T9:CreateButton({Name="Kill Particles",Callback=function()
 end})
 T9:CreateSection("About")
 T9:CreateLabel("TravHub v3.9  ·  Crystal Edition  ·  Clean Build")
-T9:CreateLabel("Fixed crosshair  ·  No Trap/Survive tabs  ·  Xeno-compatible")
-
+T9:CreateLabel("Fixed crosshair  ·  No key system  ·  Xeno-compatible")
 
 -- ══════════════════════════════════════════
 --  BOOTSTRAP
@@ -2048,7 +1757,6 @@ task.wait(0.3)
 Notify("TravHub v3.9 ✦","Clean Build loaded successfully 🔮",5)
 ShowInfo("Hub fully loaded.")
 
--- end xpcall wrapper
 end, function(err) return debug.traceback(err,2) end)
 
 if not _ok then
